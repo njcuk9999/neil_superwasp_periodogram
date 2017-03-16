@@ -146,6 +146,7 @@ def bin_data(time, data, edata=None, binsize=None, log=False):
         # if we have uncertainties
         else:
             # No uncertainties with time so just take the median
+            # btime = bin
             btime = np.median(time[mask])
             # We have no uncertainties don't weight points
             if edata is None:
@@ -288,6 +289,52 @@ def save_to_file(coldata, savename, savepath, exts=None):
         atable.write(path, format=fmt, overwrite='True')
 
 
+def neil_clean(time, data, edata, **kwargs):
+    """
+
+    :param time:
+    :param data:
+    :param edata:
+    :param kwargs:
+    :return:
+    """
+    bindata = kwargs.get('bindata', BINDATA)
+    binsize = kwargs.get('binsize', BINSIZE)
+    sigmaclip = kwargs.get('sigmaclip', SIGMACLIP)
+    sigma = kwargs.get('sigma', SIGMA)
+    size = kwargs.get('size', SIZE)
+    errorclip = kwargs.get('errorclip', ERRORCLIP)
+    percentage = kwargs.get('percentage', PERCENTAGE)
+
+    # Bin data
+    if bindata:
+        bkwargs = dict(binsize=binsize, log=True)
+        if edata is None:
+            res = bin_data(time, data, **bkwargs)
+        else:
+            res = bin_data(time, data, edata, **bkwargs)
+        time, data, edata = res
+    # ----------------------------------------------------------------------
+    # Sigma Clip
+    if sigmaclip:
+        gmask1 = sigma_clip(data, x=time, sigma=sigma, boxsize=size,
+                            weighted=True)
+    else:
+        gmask1 = np.ones_like(data)
+    # ----------------------------------------------------------------------
+    # Uncertainty clip
+    if errorclip:
+        gmask2 = uncertanty_clip(data, edata, percent=percentage)
+    else:
+        gmask2 = np.ones_like(data)
+    # ----------------------------------------------------------------------
+    # combine data masks
+    gmask = gmask1 & gmask2
+    time = time[gmask]
+    data, edata = data[gmask], edata[gmask]
+    return time, data, edata
+
+
 # =============================================================================
 # Start of code
 # =============================================================================
@@ -303,32 +350,11 @@ if __name__ == "__main__":
     data_arr = np.array(lightcurve[DATACOL])
     edata_arr = np.array(lightcurve[EDATACOL])
     # ----------------------------------------------------------------------
-    # Sigma Clip
-    if SIGMACLIP:
-        gmask1 = sigma_clip(data_arr, x=time_arr, sigma=SIGMA,
-                            boxsize=SIZE, weighted=False)
-    else:
-        gmask1 = np.ones_like(data_arr)
-    # ----------------------------------------------------------------------
-    # Uncertainty clip
-    if ERRORCLIP:
-        gmask2 = uncertanty_clip(data_arr, edata_arr, percent=1.0)
-    else:
-        gmask2 = np.ones_like(data_arr)
-    # ----------------------------------------------------------------------
-    # combine data masks
-    gmask = gmask1 & gmask2
-    time_arr = time_arr[gmask]
-    data_arr, edata_arr = data_arr[gmask], edata_arr[gmask]
-    # ----------------------------------------------------------------------
-    # Bin data
-    if BINDATA:
-        kwargs = dict(binsize=BINSIZE, log=True)
-        if edata_arr is None:
-            res = bin_data(time_arr, data_arr, **kwargs)
-        else:
-            res = bin_data(time_arr, data_arr, edata_arr, **kwargs)
-        time_arr, data_arr, edata_arr = res
+    nkwargs = dict(bindata=BINDATA, binsize=BINSIZE, sigmaclip=SIGMACLIP,
+                   sigma=SIGMA, size=SIZE, errorclip=ERRORCLIP,
+                   percentage=PERCENTAGE)
+    time_arr, data_arr, edata_arr = neil_clean(time_arr, data_arr, edata_arr,
+                                               **nkwargs)
     # ----------------------------------------------------------------------
     # push back into dictionary
     pdata = OrderedDict(time=time_arr,

@@ -12,7 +12,6 @@ Version 0.0.0
 
 import numpy as np
 from astropy.io import fits
-import time
 from numexpr import evaluate as ne
 
 # =============================================================================
@@ -30,7 +29,7 @@ MAX_SIZE = 10000
 # =============================================================================
 # Define functions
 # =============================================================================
-def dft_o(freq, tvec, dvec, kind='full'):
+def dft_o(freq, tvec, dvec, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -79,7 +78,7 @@ def dft_o(freq, tvec, dvec, kind='full'):
     return wfn, dft
 
 
-def dft_ne(freq, tvec, dvec, log=False, kind='full'):
+def dft_ne(freq, tvec, dvec, log=False, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -133,7 +132,7 @@ def dft_ne(freq, tvec, dvec, log=False, kind='full'):
     return wfn, dft
 
 
-def dft_ne2(freq, tvec, dvec, kind='full'):
+def dft_ne2(freq, tvec, dvec, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -185,7 +184,7 @@ def dft_ne2(freq, tvec, dvec, kind='full'):
     return wfn, dft
 
 
-def dft_nfor(freq, tvec, dvec, kind='full'):
+def dft_nfor(freq, tvec, dvec, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -235,7 +234,7 @@ def dft_nfor(freq, tvec, dvec, kind='full'):
 
 
 
-def dft_nfor_ne(freq, tvec, dvec, kind='full'):
+def dft_nfor_ne(freq, tvec, dvec, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -294,7 +293,7 @@ def dft_nfor_ne(freq, tvec, dvec, kind='full'):
 
 
 
-def dft_l(freq, tvec, dvec, log=False, maxsize=None, kind='full'):
+def dft_l(freq, tvec, dvec, log=False, maxsize=None, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -348,7 +347,7 @@ def dft_l(freq, tvec, dvec, log=False, maxsize=None, kind='full'):
     return wfn, dft
 
 
-def dft_l_ne(freq, tvec, dvec, log=False, maxsize=None, kind='full'):
+def dft_l_ne(freq, tvec, dvec, log=False, maxsize=None, kind='half'):
     """
     Calculate the Discrete Fourier transform (slow scales with N^2)
     The DFT is normalised to have the mean value of the data at zero frequency
@@ -427,7 +426,7 @@ def __tqdmlog__(x_input, log):
 # =============================================================================
 # Main code here
 if __name__ == "__main__":
-
+    import time as ttime
     # Load data
     print('\n Loading data...')
     fitsrec = fits.getdata(TESTPATH, ext=1)
@@ -444,33 +443,33 @@ if __name__ == "__main__":
         lengths.append(len(freqs))
         # ----------------------------------------------------------------------
         print('\n\t Slow DFT...')
-        start1 = time.time()
+        start1 = ttime.time()
         wfn1, dft1 = dft_o(freqs, time_arr, data_arr)
-        end1 = time.time()
+        end1 = ttime.time()
         print('len(t)={0} len(f)={1}'.format(len(time_arr), len(freqs)))
         print('Time taken = {0}'.format(end1 - start1))
         times1.append(end1 - start1)
         # # ----------------------------------------------------------------------
         print('\n\t DFT with numexpr...')
-        start2 = time.time()
+        start2 = ttime.time()
         wfn2, dft2 = dft_l(freqs, time_arr, data_arr)
-        end2 = time.time()
+        end2 = ttime.time()
         print('len(t)={0} len(f)={1}'.format(len(time_arr), len(freqs)))
         print('Time taken = {0}'.format(end2 - start2))
         times2.append(end2 - start2)
         # # ----------------------------------------------------------------------
         print('\n\t DFT without for loop...')
-        start3 = time.time()
+        start3 = ttime.time()
         wfn3, dft3 = dft_l(freqs, time_arr, data_arr)
-        end3 = time.time()
+        end3 = ttime.time()
         print('len(t)={0} len(f)={1}'.format(len(time_arr), len(freqs)))
         print('Time taken = {0}'.format(end3 - start3))
         times3.append(end3 - start3)
         # ----------------------------------------------------------------------
         print('\n\t DFT without for loop + numexpr...')
-        start4 = time.time()
+        start4 = ttime.time()
         wfn4, dft4 = dft_l_ne(freqs, time_arr, data_arr)
-        end4 = time.time()
+        end4 = ttime.time()
         print('len(t)={0} len(f)={1}'.format(len(time_arr), len(freqs)))
         print('Time taken = {0}'.format(end4 - start4))
         times4.append(end4 - start4)

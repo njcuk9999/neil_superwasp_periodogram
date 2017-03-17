@@ -14,19 +14,21 @@ import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
 from astropy.stats import LombScargle
-from astropy.table import Table
-from astropy import units as u
-from tqdm import tqdm
-import sys
-sys.path.append('../')
 try:
-    from clean_periodogram import clean_periodogram, lombscargle_periodogram
+    from clean_periodogram import clean_periodogram
 except ModuleNotFoundError:
     raise Exception("clean_periodogram.py needed")
 try:
     from Neil_clean import neil_clean
 except ModuleNotFoundError:
     raise Exception(" Neail_clean.py needed")
+try:
+    from non_clean_periodogram_functions import lombscargle_periodogram
+    from non_clean_periodogram_functions import phase_fold
+    from non_clean_periodogram_functions import iFAP
+    from non_clean_periodogram_functions import fap_montecarlo
+except ModuleNotFoundError:
+    raise Exception("Program requires 'non_clean_periodogram_functions.py'")
 
 
 # =============================================================================
@@ -60,21 +62,32 @@ WEIGHTED = True
 ERRORCLIP = True
 PERCENTAGE = 0.5
 
+# periodogram constants
+SAMPLES_PER_PEAK = 4
+NYQUIST_FACTOR = 100
+
 
 TIME_CONST = 2453800
 
 MESSINA_PERIOD = 3.237
 
+
 # =============================================================================
 # Define functions
 # =============================================================================
 def messina_plot(time, data, edata, name, lfreq, lpower, cfreq, camp,
-                 tfold, tfit, dfit):
+                 mlfreq, mlpower, tfold, tfit, dfit, nyquist_factor,
+                 samples_per_peak):
+
+    limits = [0.1, 100]
+    levels = np.array([0.01])
+    faplevels = iFAP(levels, len(time), samples_per_peak, nyquist_factor)
+
 
     plt.close()
     fig = plt.figure()
     fig.set_size_inches(16, 12)
-    shape = (2,3)
+    shape = (2, 3)
     frame1 = plt.subplot2grid(shape, (0, 0), rowspan=1, colspan=1)
     frame2 = plt.subplot2grid(shape, (0, 1), rowspan=1, colspan=1)
     frame3 = plt.subplot2grid(shape, (0, 2), rowspan=1, colspan=1)
@@ -91,28 +104,48 @@ def messina_plot(time, data, edata, name, lfreq, lpower, cfreq, camp,
     frame1.set_ylim(*frame1.get_ylim()[::-1])
 
     # frame 2: Lomb-Scargle
-    frame2.plot(1.0/lfreq, lpower, lw=0.5, zorder=2)
+    ltime = 1.0/lfreq
+    lmask = (ltime > limits[0]) & (ltime < limits[1])
+    normed_lpower = lpower[lmask]
+    frame2.plot(ltime[lmask], normed_lpower, lw=0.5, zorder=2, color='k')
     frame2.set_xlabel('time (d)')
     frame2.set_ylabel('$P_N$')
     frame2.set_title('Lomb-Scagle')
     frame2.set_xscale('log')
-    frame2.set_xlim(0.01, 100)
+    frame2.set_xlim(0.1, 100)
     xmin, xmax, ymin, ymax = frame2.axis()
     frame2.vlines(MESSINA_PERIOD, ymin, ymax,
-                  colors='r', linestyles='dashed', zorder=1, alpha=0.5)
+                  colors='b', linestyles='solid', zorder=1, alpha=0.25)
     frame2.set_ylim(ymin, ymax)
+    frame2.hlines(faplevels, xmin, xmax,
+                  colors='r', linestyles='dashed', zorder=1, alpha=0.5)
+    mltime = np.array(1.0/mlfreq)
+    mlmask = (mltime > limits[0]) & (mltime < limits[1])
+
+    # ##########################################################################
+    # This is a total HACK and has no real justification
+    normed_mlpower = np.max(normed_lpower)*(mlpower[mlmask] - 1)/np.max(mlpower)
+    # ##########################################################################
+
+    frame2.plot(mltime[mlmask], normed_mlpower,
+                lw=0.5, zorder=3, color='r')
 
     # frame 3: Clean
-    frame3.plot(1.0/cfreq, camp, lw=0.5, zorder=2)
+    ctime = np.array(1.0/cfreq)
+    cmask = (ctime > limits[0]) & (ctime < limits[1])
+    frame3.plot(ctime[cmask], cpower[cmask], lw=0.5, zorder=2, color='k')
     frame3.set_xlabel('time (d)')
-    frame3.set_ylabel('Amplitude')
+    frame3.set_ylabel('$P_N$')
     frame3.set_title('Clean')
     frame3.set_xscale('log')
-    frame3.set_xlim(0.01, 100)
+    frame3.set_xlim(0.1, 100)
     xmin, xmax, ymin, ymax = frame3.axis()
     frame3.vlines(MESSINA_PERIOD, ymin, ymax,
-                  colors='r', linestyles='dashed', zorder=1, alpha=0.5)
+                  colors='b', linestyles='solid', zorder=1, alpha=0.25)
     frame3.set_ylim(ymin, ymax)
+    frame2.hlines(faplevels, xmin, xmax,
+                  colors='r', linestyles='dashed', zorder=1, alpha=0.5)
+
 
     # frame 4: Phase folded lightcurve
     frame4.errorbar(tfold, data, yerr=edata, linestyle='None',
@@ -123,19 +156,10 @@ def messina_plot(time, data, edata, name, lfreq, lpower, cfreq, camp,
     frame4.set_ylim(*frame4.get_ylim()[::-1])
     frame4.set_title('Folded on Messina+2016 period')
 
+    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+
     plt.show()
     plt.close()
-
-
-def phase_fold(time, data, period):
-    # fold the xdata at given period
-    timefold = (time / period) % 1
-    # commute the lomb-scargle model at given period
-    tfit = np.linspace(0.0, time.max(), 1000)
-    yfit = LombScargle(time, data).model(tfit, 1.0/period)
-    tfitfold = (tfit / period) % 1
-    fsort = np.argsort(tfitfold)
-    return timefold, tfitfold[fsort], yfit[fsort]
 
 
 # =============================================================================
@@ -150,7 +174,7 @@ if __name__ == "__main__":
     # ----------------------------------------------------------------------
     # get columns
     time_arr = np.array(lightcurve[TIMECOL])
-    time_arr = time_arr - TIME_CONST
+    time_arr -= TIME_CONST
     data_arr = np.array(lightcurve[DATACOL])
     edata_arr = np.array(lightcurve[EDATACOL])
     # ----------------------------------------------------------------------
@@ -162,21 +186,35 @@ if __name__ == "__main__":
                                                **nkwargs)
     # -------------------------------------------------------------------------
     # Run clean periodogram
-    ckwargs = dict(freqs=None, log=True, full=True, maxsize=10000)
+    ckwargs = dict(freqs=None, log=True, full=True, maxsize=10000,
+                   fmax=NYQUIST_FACTOR, ppb=SAMPLES_PER_PEAK)
     freqs1, wfn, dft, cdft = clean_periodogram(time_arr, data_arr, **ckwargs)
-    camp1 = 2.0*abs(cdft)
-    freqs1a = freqs1[0: len(camp1)]
+    # cdft is the amplitudes power = DFT(x) * conj(DFT(x))
+    cpower = np.array(cdft*np.conjugate(cdft))
+    freqs1a = freqs1[0: len(cpower)]
     # -------------------------------------------------------------------------
     # Run lombscargle periodogram
-    freqs2, power = lombscargle_periodogram(time_arr, data_arr, freqs=None)
+    lkwargs = dict(freqs=None, nyquist_factor=NYQUIST_FACTOR,
+                   samples_per_peak=SAMPLES_PER_PEAK)
+    freqs2, lpower1 = lombscargle_periodogram(time_arr, data_arr, edata_arr,
+                                              **lkwargs)
+    # -------------------------------------------------------------------------
+    # Run lombscargle periodogram
+    fargs = [time_arr, data_arr, edata_arr]
+    fkwargs = dict(freqs=None)
+    lmkwargs = dict(N=1000, log=True, nyquist_factor=NYQUIST_FACTOR,
+                   samples_per_peak=SAMPLES_PER_PEAK)
+    freqs3, lpower2, _, _ = fap_montecarlo(lombscargle_periodogram, fargs,
+                                           fkwargs, **lmkwargs)
     # -------------------------------------------------------------------------
     # phase fold on Messina period
     timefold, timefit, datafit = phase_fold(time_arr, data_arr, MESSINA_PERIOD)
     # -------------------------------------------------------------------------
     # plot messina plot
     targetname = '{0}  Messina+2016 period = {1}'.format(SID, MESSINA_PERIOD)
-    messina_plot(time_arr, data_arr, edata_arr, targetname, freqs2, power,
-                 freqs1a, camp1, timefold, timefit, datafit)
+    messina_plot(time_arr, data_arr, edata_arr, targetname, freqs2, lpower1,
+                 freqs1a, cpower, freqs3, lpower2, timefold, timefit, datafit,
+                 NYQUIST_FACTOR, SAMPLES_PER_PEAK)
 
 
 # =============================================================================

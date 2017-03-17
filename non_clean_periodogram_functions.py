@@ -64,6 +64,9 @@ def probability(Pn, N):
       Returns the probability to obtain a power *Pn* or larger from the noise,
       which is assumes to be Gaussian.
 
+    from http://www.hs.uni-hamburg.de/DE/Ins/Per/Czesla/PyA/PyA/pyTimingDoc/
+         pyPeriodDoc/periodograms.html
+
       Parameters:
         - `Pn` - float, Power threshold.
 
@@ -97,6 +100,10 @@ def iprobability(Prob, N):
       Inverse of `Prob(Pn)`. Returns the minimum power
       for a given probability level `Prob`.
 
+    from http://www.hs.uni-hamburg.de/DE/Ins/Per/Czesla/PyA/PyA/pyTimingDoc/
+         pyPeriodDoc/periodograms.html
+
+
       Parameters:
         - `Prob` - float, probability
     """
@@ -106,6 +113,10 @@ def iprobability(Prob, N):
 def FAP(Pn, N, ofac, hifac):
     """
       Obtain the false-alarm probability (FAP).
+
+    from http://www.hs.uni-hamburg.de/DE/Ins/Per/Czesla/PyA/PyA/pyTimingDoc/
+         pyPeriodDoc/periodograms.html
+
 
       The FAP denotes the probability that at least one out of M
       independent power values in a prescribed search band of a
@@ -150,6 +161,10 @@ def iFAP(FAPlevel, N, ofac, hifac):
     """
       Power threshold for FAP level.
 
+    from http://www.hs.uni-hamburg.de/DE/Ins/Per/Czesla/PyA/PyA/pyTimingDoc/
+         pyPeriodDoc/periodograms.html
+
+
       Parameters
       ----------
       FAPlevel : float or array
@@ -175,9 +190,20 @@ def iFAP(FAPlevel, N, ofac, hifac):
 
 def fap_montecarlo(periodfunction, fargs, fkwargs, N=1000, log=False,
                    samples_per_peak=5, nyquist_factor=5):
+    """
 
-    # false_al
-    if periodfunction.__name__ == 'clean_periodogram':
+    :param periodfunction:
+    :param fargs:
+    :param fkwargs:
+    :param N:
+    :param log:
+    :param samples_per_peak:
+    :param nyquist_factor:
+    :return:
+    """
+
+    fname = periodfunction.__name__
+    if fname == 'clean_periodogram':
         time, data = fargs
         # force turn off logging
         fkwargs['log'] = False
@@ -186,7 +212,7 @@ def fap_montecarlo(periodfunction, fargs, fkwargs, N=1000, log=False,
         fkwargs['ppb'] = samples_per_peak
         # set edata to none
         edata = None
-    elif periodfunction.__name__ == 'lombscargle_periodogram':
+    elif fname == 'lombscargle_periodogram':
         time, data, edata = fargs
         # force sampling and maximum peak
         fkwargs['nyquist_factor'] = nyquist_factor
@@ -200,23 +226,23 @@ def fap_montecarlo(periodfunction, fargs, fkwargs, N=1000, log=False,
     tsize = len(time)
     powers, freq = [], []
     if log:
-        print('\n Computing Monte Carlo periodogram...')
+        print('\n Computing Monte Carlo periodogram for {0}...'.format(fname))
     for ni in __tqdmlog__(range(N), log):
         # randomise the days (but not the times)
         randomdays = np.random.choice(days, tsize)
         # add back in the fractional part of each day
         randomtimes = randomdays + fdays
         # Now insert these times into fargs (from period function)
-        if periodfunction.__name__ == 'clean_periodogram':
+        if fname == 'clean_periodogram':
             rfargs = randomtimes, data
-        elif periodfunction.__name__ == 'lombscargle_periodogram':
+        elif fname == 'lombscargle_periodogram':
             rfargs = randomtimes, data, edata
         # run the given period function
         output = periodfunction(*rfargs, **fkwargs)
         # deal with differing output
-        if periodfunction.__name__ == 'clean_periodogram':
+        if fname == 'clean_periodogram':
             freq, _, _, power = output
-        elif periodfunction.__name__ == 'lombscargle_periodogram':
+        elif fname == 'lombscargle_periodogram':
             freq, power = output
         else:
             raise Exception("No way in here.")

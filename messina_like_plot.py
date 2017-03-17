@@ -75,9 +75,9 @@ MESSINA_PERIOD = 3.237
 # =============================================================================
 # Define functions
 # =============================================================================
-def messina_plot(time, data, edata, name, lfreq, lpower, cfreq, camp,
-                 mlfreq, mlpower, tfold, tfit, dfit, nyquist_factor,
-                 samples_per_peak):
+def messina_plot(time, data, edata, name, lfreq, lpower, mlfreq, mlpower,
+                 cfreq, cpower, mcfreq, mcpower, tfold, tfit, dfit,
+                 nyquist_factor, samples_per_peak):
 
     limits = [0.1, 100]
     levels = np.array([0.01])
@@ -119,20 +119,21 @@ def messina_plot(time, data, edata, name, lfreq, lpower, cfreq, camp,
     frame2.set_ylim(ymin, ymax)
     frame2.hlines(faplevels, xmin, xmax,
                   colors='r', linestyles='dashed', zorder=1, alpha=0.5)
+
     mltime = np.array(1.0/mlfreq)
     mlmask = (mltime > limits[0]) & (mltime < limits[1])
-
     # ##########################################################################
     # This is a total HACK and has no real justification
-    normed_mlpower = np.max(normed_lpower)*(mlpower[mlmask] - 1)/np.max(mlpower)
+    normed_mlpower = abs(mlpower[mlmask] - np.mean(mlpower[mlmask]))
+    normed_mlpower = np.max(normed_lpower)*normed_mlpower/np.max(normed_mlpower)
     # ##########################################################################
-
-    frame2.plot(mltime[mlmask], normed_mlpower,
+    frame2.plot(mltime[mlmask], normed_mlpower, linestyle='--',
                 lw=0.5, zorder=3, color='r')
 
     # frame 3: Clean
     ctime = np.array(1.0/cfreq)
     cmask = (ctime > limits[0]) & (ctime < limits[1])
+    normed_cpower =cpower[cmask]
     frame3.plot(ctime[cmask], cpower[cmask], lw=0.5, zorder=2, color='k')
     frame3.set_xlabel('time (d)')
     frame3.set_ylabel('$P_N$')
@@ -146,6 +147,15 @@ def messina_plot(time, data, edata, name, lfreq, lpower, cfreq, camp,
     frame2.hlines(faplevels, xmin, xmax,
                   colors='r', linestyles='dashed', zorder=1, alpha=0.5)
 
+    mctime = np.array(1.0/mcfreq)
+    mcmask = (mctime > limits[0]) & (mctime < limits[1])
+    # ##########################################################################
+    # This is a total HACK and has no real justification
+    normed_mcpower = abs(mcpower[mcmask] - np.mean(mcpower[mcmask]))
+    normed_mcpower = np.max(normed_cpower)*normed_mcpower/np.max(normed_mcpower)
+    # ##########################################################################
+    frame2.plot(mctime[mcmask], normed_mcpower, linestyle='--',
+                lw=0.5, zorder=3, color='r')
 
     # frame 4: Phase folded lightcurve
     frame4.errorbar(tfold, data, yerr=edata, linestyle='None',
@@ -193,18 +203,30 @@ if __name__ == "__main__":
     cpower = np.array(cdft*np.conjugate(cdft))
     freqs1a = freqs1[0: len(cpower)]
     # -------------------------------------------------------------------------
+    # Run Monte Carlo lombscargle periodogram
+    fargs = [time_arr, data_arr]
+    fkwargs = dict(freqs=None, log=True, full=True, maxsize=10000,
+                   fmax=NYQUIST_FACTOR, ppb=SAMPLES_PER_PEAK)
+    lmkwargs = dict(N=100, log=True, nyquist_factor=NYQUIST_FACTOR,
+                    samples_per_peak=SAMPLES_PER_PEAK)
+    freqs1_mc, cdft_mc, _, _ = fap_montecarlo(clean_periodogram, fargs,
+                                              fkwargs, **lmkwargs)
+    # cdft is the amplitudes power = DFT(x) * conj(DFT(x))
+    cpower_mc = np.array(cdft_mc*np.conjugate(cdft_mc))
+    freqs1a_mc = freqs1_mc[0: len(cpower_mc)]
+    # -------------------------------------------------------------------------
     # Run lombscargle periodogram
     lkwargs = dict(freqs=None, nyquist_factor=NYQUIST_FACTOR,
                    samples_per_peak=SAMPLES_PER_PEAK)
-    freqs2, lpower1 = lombscargle_periodogram(time_arr, data_arr, edata_arr,
+    freqs2, lpower = lombscargle_periodogram(time_arr, data_arr, edata_arr,
                                               **lkwargs)
     # -------------------------------------------------------------------------
-    # Run lombscargle periodogram
+    # Run Monte Carlo lombscargle periodogram
     fargs = [time_arr, data_arr, edata_arr]
     fkwargs = dict(freqs=None)
-    lmkwargs = dict(N=1000, log=True, nyquist_factor=NYQUIST_FACTOR,
-                   samples_per_peak=SAMPLES_PER_PEAK)
-    freqs3, lpower2, _, _ = fap_montecarlo(lombscargle_periodogram, fargs,
+    lmkwargs = dict(N=100, log=True, nyquist_factor=NYQUIST_FACTOR,
+                    samples_per_peak=SAMPLES_PER_PEAK)
+    freqs2_mc, lpower_mc, _, _ = fap_montecarlo(lombscargle_periodogram, fargs,
                                            fkwargs, **lmkwargs)
     # -------------------------------------------------------------------------
     # phase fold on Messina period
@@ -212,9 +234,9 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # plot messina plot
     targetname = '{0}  Messina+2016 period = {1}'.format(SID, MESSINA_PERIOD)
-    messina_plot(time_arr, data_arr, edata_arr, targetname, freqs2, lpower1,
-                 freqs1a, cpower, freqs3, lpower2, timefold, timefit, datafit,
-                 NYQUIST_FACTOR, SAMPLES_PER_PEAK)
+    messina_plot(time_arr, data_arr, edata_arr, targetname, freqs2, lpower,
+                 freqs2_mc, lpower_mc, freqs1a, cpower, freqs1a_mc, cpower_mc,
+                 timefold, timefit, datafit, NYQUIST_FACTOR, SAMPLES_PER_PEAK)
 
 
 # =============================================================================

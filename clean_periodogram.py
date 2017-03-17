@@ -910,8 +910,8 @@ def clean_periodogram(time, data, **kwargs):
     if log:
         print('\n Computing "dirty" discrete Fourier transform...')
         start1 = tt.time()
-        wfn, dft = run_discrete_fourier_transform(freq, time, data, log, use,
-                                                  maxsize)
+    wfn, dft = run_discrete_fourier_transform(freq, time, data, log, use,
+                                              maxsize)
     if log:
         end1 = tt.time()
         print('\n\t Took {0} s'.format(end1 - start1))

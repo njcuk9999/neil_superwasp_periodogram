@@ -14,6 +14,8 @@ import numpy as np
 from astropy.table import Table
 from astropy.stats import LombScargle
 from photutils import find_peaks
+import MySQLdb
+import pandas
 
 
 # =============================================================================
@@ -256,15 +258,37 @@ def fap_montecarlo(periodfunction, fargs, fkwargs, N=1000, log=False,
     return freq, median, upper, lower
 
 
-def phase_fold(time, data, period):
-    # fold the xdata at given period
-    tfold = (time / period) % 1
-    # commute the lomb-scargle model at given period
-    tfit = np.array(np.linspace(0.0, time.max(), 1000))
-    yfit = LombScargle(time, data).model(tfit, 1.0/period)
-    tfitfold = np.array((tfit / period) % 1)
-    fsort = np.argsort(tfitfold)
-    return tfold, tfitfold[fsort], yfit[fsort]
+def phase_fold(time, data, periods):
+    """
+    Phase fold the data (based on periods)
+
+    :param time: numpy array or list, input time(independent) vector
+
+    :param data: numpy array or list, input dependent vector
+
+    :param periods: float or array/list of floats, period(s) to phase fold over
+    :return:
+    """
+    if not hasattr(periods, '__len__'):
+        periods = [periods]
+    else:
+        pass
+
+    tfold_arr, tfitfold_arr, yfit_arr = [], [], []
+    # loop around each period
+    for period in periods:
+        # fold the xdata at given period
+        tfold = (time / period) % 1
+        # commute the lomb-scargle model at given period
+        tfit = np.array(np.linspace(0.0, time.max(), 1000))
+        yfit = LombScargle(time, data).model(tfit, 1.0/period)
+        tfitfold = np.array((tfit / period) % 1)
+        fsort = np.argsort(tfitfold)
+        tfold_arr.append(tfold)
+        tfitfold_arr.append(tfitfold[fsort])
+        yfit_arr.append(yfit[fsort])
+
+    return tfold_arr, tfitfold_arr, yfit_arr
 
 
 # =============================================================================
@@ -325,10 +349,12 @@ def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1):
     if x_range is None:
         x_range = [x.min(), x.max()]
     xmask = (x >= x_range[0]) & (x <= x_range[1])
-    x, y = x[xmask], y[xmask]
+    xr, yr = x[xmask], y[xmask]
+    if np.sum(yr) == 0:
+        raise ValueError("No power peaks in range, cannot use data set.")
     # -------------------------------------------------------------------------
     if kind == 'binpeak':
-        xpeaks, ypeaks = binmax(x, y, N=number, boxsize=5)
+        xpeaks, ypeaks = binmax(xr, yr, N=number, boxsize=5)
     else:
         raise ValueError("Kind {0} not supported.".format(kind))
     # -------------------------------------------------------------------------
@@ -350,9 +376,78 @@ def binmax(x, y, N=1, boxsize=5):
     xpeak = x[xindices]
     peaksort = np.argsort(ypeak)[::-1]
     xpeak, ypeak = xpeak[peaksort], ypeak[peaksort]
+    # deal with there being less than N peaks
+    if len(xpeak) < N:
+        xpeaki = np.array(xpeak)
+        xpeak = []
+        for xpi in range(N):
+            if xpi < len(xpeaki):
+                xpeak.append(xpeaki[xpi])
+            else:
+                xpeak.append(np.nan)
     # return the N largest peaks
     return xpeak[:N], ypeak[:N]
 
+
+def cluster(data, maxgap):
+    """Arrange data into groups where successive elements
+       differ by no more than *maxgap*
+
+       from
+       http://stackoverflow.com/questions/14783947/grouping-clustering-numbers-in-python
+
+        cluster([1, 6, 9, 100, 102, 105, 109, 134, 139], maxgap=10)
+
+        [[1, 6, 9], [100, 102, 105, 109], [134, 139]]
+
+        cluster([1, 6, 9, 99, 100, 102, 105, 134, 139, 141], maxgap=10)
+
+        [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
+
+    """
+    data.sort()
+    groups = [[data[0]]]
+    for x in data[1:]:
+        if abs(x - groups[-1][-1]) <= maxgap:
+            groups[-1].append(x)
+        else:
+            groups.append([x])
+    return groups
+
+
+def relative_cluster(data, percentagemaxgap, return_indices=False):
+    """Arrange data into groups where successive elements
+       differ by no more than *maxgap*
+
+       from
+       http://stackoverflow.com/questions/14783947/grouping-clustering-numbers-in-python
+
+        cluster([1, 6, 9, 100, 102, 105, 109, 134, 139], maxgap=10)
+
+        [[1, 6, 9], [100, 102, 105, 109], [134, 139]]
+
+        cluster([1, 6, 9, 99, 100, 102, 105, 134, 139, 141], maxgap=10)
+
+        [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
+
+    """
+    data = np.array(data)
+    argsort = np.argsort(data)
+    data = data[argsort]
+
+    groups = [[data[0]]]
+    group_index = [[argsort[0]]]
+    for i, x in enumerate(data[1:]):
+        if abs(x - groups[-1][-1]) <= x*percentagemaxgap/100.0:
+            groups[-1].append(x)
+            group_index[-1].append(argsort[i+1])
+        else:
+            groups.append([x])
+            group_index.append([argsort[i+1]])
+    if return_indices:
+        return groups, group_index
+    else:
+        return groups
 
 # =============================================================================
 # Define other mathematical functions
@@ -474,7 +569,144 @@ def bin_data(time, data, edata=None, binsize=None, log=False):
 # =============================================================================
 # Define auxiliary functions
 # =============================================================================
+def find_sys_ids(conn, mysqlkwarg):
+    # load database
+    # Must have database running
+    # mysql -u root -p
+    print("\nConnecting to database...")
+    c, conn = load_db(**mysqlkwarg)
+    # ----------------------------------------------------------------------
+    # find all systemids
+    sids = get_list_of_objects_from_db(conn)
+    return sids
+
+
+def load_db(**kwargs):
+    """
+    Connect to the database
+
+    :param kwargs: keyword arguments are as follows:
+
+    - host,     string, the hostname (default: "localhost")
+    - db        string, the datebase to connect to (default: "swasp")
+    - table     string, the table to connect to (default: "swasp_sep16_tab")
+    - user,     string, the username (default: "root")
+    - passwd    string, the password (default: "1234")
+    - conn_timeout  int, connection timeout in millseconds? (default: 100000)
+
+    :return:
+    """
+    host = kwargs.get('host', 'localhost')
+    db_name = kwargs.get('db', 'swasp')
+    uname = kwargs.get('user', 'root')
+    pword = kwargs.get('passwd', '1234')
+    conn_timeout = kwargs.get('conn_timeout', 100000)
+
+    # set database settings
+
+
+    conn1 = MySQLdb.connect(host=host, user=uname, db=db_name,
+                            connect_timeout=conn_timeout, passwd=pword)
+    c1 = conn1.cursor()
+    return c1, conn1
+
+
+def get_list_of_objects_from_db(conn=None, **kwargs):
+    """
+    Gets a list of objects from the database using keyword arg query
+    :param conn: the connection to the database
+
+    :param kwargs: keyword arguments are as follows:
+
+    - host,     string, the hostname (default: "localhost")
+    - db        string, the datebase to connect to (default: "swasp")
+    - table     string, the table to connect to (default: "swasp_sep16_tab")
+    - user,     string, the username (default: "root")
+    - passwd    string, the password (default: "1234")
+    - query     string or None, if defined the query to use
+    - conn_timeout  int, connection timeout in millseconds? (default: 100000)
+    :return:
+    """
+
+    query = kwargs.get('query', None)
+    # ----------------------------------------------------------------------
+    if conn is None:
+        c, conn = load_db(**kwargs)
+    # find all systemids
+    print("\nGetting list of objects...")
+    if query is None:
+        query = "SELECT CONCAT(c.systemid,c.comp)"
+        query += " AS sid FROM {0} AS c".format(kwargs['table'])
+        query += " where c.systemid is not null and c.systemid <> ''"
+    rawdata = pandas.read_sql_query(query, conn)
+    rawsystemid = np.array(rawdata['sid'])
+    # get list of unique ids (for selecting each as a seperate curve)
+    sids = np.array(np.unique(rawsystemid), dtype=str)
+    # return list of objects
+    return sids
+
+
+def get_lightcurve_data(conn=None, sid=None, sortcol=None, replace_infs=True,
+                        **kwargs):
+    """
+
+    :param conn: connection to the database
+
+    :param sid: string or None, if string and query is None uses default
+                query to get data
+
+    :param sortcol: string or None, if string use this column to sort by
+                    (must be in sql database) if not don't sort
+
+    :param kwargs: keyword arguments are as follows:
+
+    - host,     string, the hostname (default: "localhost")
+    - db        string, the datebase to connect to (default: "swasp")
+    - table     string, the table to connect to (default: "swasp_sep16_tab")
+    - user,     string, the username (default: "root")
+    - passwd    string, the password (default: "1234")
+    - query     string or None, if defined the query to use
+    - conn_timeout  int, connection timeout in millseconds? (default: 100000)
+
+    :return:
+    """
+    # Connect to database if not already connected
+    if conn is None:
+        c, conn = load_db(**kwargs)
+    query = kwargs.get('query', None)
+    # if we have no sid and no query raise exception
+    if query is None and sid is None:
+        raise ValueError("Must have either an SID defined or a query defined.")
+    # get data using SQL query on database
+    if query is None:
+        query = 'SELECT * FROM {0} AS c '.format(kwargs['table'])
+        query += 'WHERE CONCAT(c.systemid,c.comp) = "{0}"'.format(sid)
+    else:
+        query = kwargs['query']
+    # use pandas to real sql query
+    pdata = pandas.read_sql_query(query, conn)
+    # sort by HJD column
+    if sortcol is not None:
+        pdata = pdata.sort_values(sortcol)
+    # Replace infinities with nans
+    if replace_infs:
+        pdata = pdata.replace([np.inf, -np.inf], np.nan)
+    # return pdata
+    return pdata
+
+
 def save_to_file(coldata, savename, savepath, exts=None):
+    """
+    Write data to
+
+    :param coldata: fits rec, pandas dataframe, dictionary, keys and values,
+                    data containing columns to write to file
+    :param savename: string, name to save file as
+    :param savepath: string, location to save file in
+    :param exts: list of strings, formats to save to, currently supported
+                 are: fits, dat (ascii), csv
+    :return:
+    """
     # ---------------------------------------------------------------------
     # Convert to astropy table
     atable = Table()

@@ -20,12 +20,12 @@ try:
 except ModuleNotFoundError:
     USE = "SLOW"
 try:
-    from non_clean_periodogram_functions import bin_data
-    from non_clean_periodogram_functions import quantile_1D
-    from non_clean_periodogram_functions import save_to_file
-    from non_clean_periodogram_functions import __tqdmlog__
+    from periodogram_functions import bin_data
+    from periodogram_functions import quantile_1D
+    from periodogram_functions import save_to_file
+    from periodogram_functions import __tqdmlog__
 except ModuleNotFoundError:
-    raise Exception("Program requires 'non_clean_periodogram_functions.py'")
+    raise Exception("Program requires 'periodogram_functions.py'")
 
 
 # =============================================================================

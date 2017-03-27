@@ -14,9 +14,9 @@ from astropy.io import fits
 import os
 import subprocess
 try:
-    from periodogram_functions import load_db
-    from periodogram_functions import get_list_of_objects_from_db
-    from periodogram_functions import get_lightcurve_data
+    from .periodogram_functions import load_db
+    from .periodogram_functions import get_list_of_objects_from_db
+    from .periodogram_functions import get_lightcurve_data
 except ModuleNotFoundError:
     raise Exception("Program requires 'periodogram_functions.py'")
 # =============================================================================
@@ -113,7 +113,8 @@ def load_messina_matches():
             continue
         s_id = '{0}{1}'.format(systemid[sit].strip(), comp[sit].strip())
         s_ids.append(s_id.strip())
-    return s_ids, periods
+    usid, indices = np.unique(s_ids, return_index=True)
+    return usid, periods[indices]
 
 
 def command(process, ignore_error=True):
@@ -146,6 +147,8 @@ def command(process, ignore_error=True):
                     _ = input('Press enter to continue, ctrl+c to exit.')
                     ignore_error=True
                     cond = False
+            if "Skipping due to file existing" in line:
+                cond = False
         errfile.close()
         outfile = open(path + outfilepath, 'w')
         errfile = open(path + errfilepath, 'w')
@@ -176,6 +179,16 @@ if __name__ == "__main__":
     for sit, sid in enumerate(sids):
         pargs = ['='*50, sit+1, len(sids), sid]
         print('\n{0}\n {1}/{2} Processing sid = {3} \n{0}\n'.format(*pargs))
+        # ----------------------------------------------------------------------
+        # if plot exists then skip (if SKIP = True)
+        tname = sid
+        if SKIP:
+            filename = 'Messina_plot_' + tname.replace(' ', '_') + '.png'
+            if filename in os.listdir(PLOTPATH):
+                print('Skipping due to file existing')
+                continue
+        # ----------------------------------------------------------------------
+        # run command
         args = make_commandline_args(SID=sid, DPATH=None,
                                      MESSINA_PERIOD=mperiods[sit])
         cmdstring = ['python', PROGRAM_NAME] + args

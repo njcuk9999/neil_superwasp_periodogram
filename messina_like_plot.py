@@ -16,21 +16,21 @@ import matplotlib.pyplot as plt
 import sys
 import os
 try:
-    from clean_periodogram import clean_periodogram
+    from .clean_periodogram import clean_periodogram
 except ModuleNotFoundError:
     raise Exception("clean_periodogram.py needed")
 try:
-    from neil_clean import neil_clean
+    from .neil_clean import neil_clean
 except ModuleNotFoundError:
     raise Exception(" Neail_clean.py needed")
 try:
-    from periodogram_functions import lombscargle_periodogram
-    from periodogram_functions import phase_fold
-    from periodogram_functions import iFAP
-    from periodogram_functions import fap_montecarlo
-    from periodogram_functions import find_y_peaks
-    from periodogram_functions import get_lightcurve_data
-    from periodogram_functions import relative_cluster
+    from .periodogram_functions import lombscargle_periodogram
+    from .periodogram_functions import phase_fold
+    from .periodogram_functions import iFAP
+    from .periodogram_functions import fap_montecarlo
+    from .periodogram_functions import find_y_peaks
+    from .periodogram_functions import get_lightcurve_data
+    from .periodogram_functions import relative_cluster
 except ModuleNotFoundError:
     raise Exception("Program requires 'periodogram_functions.py'")
 
@@ -44,7 +44,7 @@ DPATH = 'None'
 PLOTPATH = WORKSPACE + '/Plots/Messina_like_plots/'
 # -----------------------------------------------------------------------------
 SID = 'BPC_46A'
-SID = 'BPC_39B'
+SID = 'BPC_4B'
 SKIP = False
 # -----------------------------------------------------------------------------
 # Column info
@@ -423,7 +423,7 @@ if __name__ == "__main__":
     # if plot exists then skip (if SKIP = True)
     tname = pp['SID']
     if pp['SKIP']:
-        filename = 'Messina_plot_' + tname.replace(' ', '_')
+        filename = 'Messina_plot_' + tname.replace(' ', '_') + '.png'
         if filename in os.listdir(pp['PLOTPATH']):
             sys.exit('Skipping due to file existing')
     # ----------------------------------------------------------------------

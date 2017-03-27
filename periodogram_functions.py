@@ -93,6 +93,9 @@ def probability(Pn, N):
 
         This formula is often used erroneously in this context.
     """
+    if N == 1:
+        return np.nan
+
     return (1. - 2. * Pn / (N - 1.)) ** ((N - 3.) / 2.)
 
 
@@ -108,6 +111,9 @@ def iprobability(Prob, N):
       Parameters:
         - `Prob` - float, probability
     """
+    if N == 3:
+        return np.nan
+
     return (N - 1.) / 2. * (1. - Prob** (2. / (N - 3.)))
 
 
@@ -320,7 +326,8 @@ def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1):
     :return:
     """
     if y is None:
-        return [], []
+        print('\n No y data present - cannot find peaks')
+        return np.repeat(np.nan, number), np.repeat(np.nan, number)
     # -------------------------------------------------------------------------
     # deal with no x axis value
     if x is None:
@@ -351,11 +358,12 @@ def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1):
     xmask = (x >= x_range[0]) & (x <= x_range[1])
     xr, yr = x[xmask], y[xmask]
     if np.sum(yr) == 0:
-        raise ValueError("No power peaks in range, cannot use data set.")
+        return np.repeat(np.nan, number), np.repeat(np.nan, number)
     # -------------------------------------------------------------------------
     if kind == 'binpeak':
         xpeaks, ypeaks = binmax(xr, yr, N=number, boxsize=5)
     else:
+        print('\n No peaks in xrange={0}'.format(x_range))
         raise ValueError("Kind {0} not supported.".format(kind))
     # -------------------------------------------------------------------------
     # return

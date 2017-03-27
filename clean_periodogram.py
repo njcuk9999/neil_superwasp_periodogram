@@ -15,15 +15,15 @@ from scipy.signal import convolve
 from astropy.io import fits
 import time as tt
 try:
-    from fastDFT import dft_l, dft_l_ne
+    from .fastDFT import dft_l, dft_l_ne
     USE = "FAST"
 except ModuleNotFoundError:
     USE = "SLOW"
 try:
-    from periodogram_functions import bin_data
-    from periodogram_functions import quantile_1D
-    from periodogram_functions import save_to_file
-    from periodogram_functions import __tqdmlog__
+    from .periodogram_functions import bin_data
+    from .periodogram_functions import quantile_1D
+    from .periodogram_functions import save_to_file
+    from .periodogram_functions import __tqdmlog__
 except ModuleNotFoundError:
     raise Exception("Program requires 'periodogram_functions.py'")
 

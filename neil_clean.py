@@ -170,13 +170,13 @@ def neil_clean(time, data, edata, **kwargs):
         gmask1 = sigma_clip(data, x=time, sigma=sigma, boxsize=size,
                             weighted=True)
     else:
-        gmask1 = np.ones_like(data)
+        gmask1 = np.ones_like(data, dtype=bool)
     # ----------------------------------------------------------------------
     # Uncertainty clip
     if errorclip:
         gmask2 = uncertanty_clip(data, edata, percent=percentage)
     else:
-        gmask2 = np.ones_like(data)
+        gmask2 = np.ones_like(data, dtype=bool)
     # ----------------------------------------------------------------------
     # combine data masks
     gmask = gmask1 & gmask2

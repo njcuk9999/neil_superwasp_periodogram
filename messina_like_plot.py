@@ -428,7 +428,9 @@ if __name__ == "__main__":
             sys.exit('Skipping due to file existing')
     # ----------------------------------------------------------------------
     # load data from file
-    if pp['DPATH'] != str(None):
+    if '.fits' in pp['DPATH']:
+        lightcurve = fits.getdata(pp['DPATH'], ext=1)
+    elif pp['DPATH'] != str(None):
         print("\n Loading data...")
         path = pp['DPATH'] + '{0}_lightcurve.fits'.format(pp['SID'])
         lightcurve = fits.getdata(path)

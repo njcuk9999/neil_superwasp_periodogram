@@ -14,11 +14,11 @@ from astropy.io import fits
 import os
 import subprocess
 try:
-    from .periodogram_functions import load_db
-    from .periodogram_functions import get_list_of_objects_from_db
-    from .periodogram_functions import get_lightcurve_data
+    from periodogram_functions import load_db
+    from periodogram_functions import get_list_of_objects_from_db
+    from periodogram_functions import get_lightcurve_data
 except ModuleNotFoundError:
-    raise Exception("Program requires 'periodogram_functions.py'")
+    raise ModuleNotFoundError("Program requires 'periodogram_functions.py'")
 # =============================================================================
 # Define variables
 # =============================================================================

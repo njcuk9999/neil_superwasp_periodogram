@@ -38,7 +38,6 @@ except ModuleNotFoundError:
 # Define variables
 # =============================================================================
 # set file paths
-# set file paths
 WORKSPACE = '/Astro/Projects/RayPaul_Work/SuperWASP/'
 DPATH = WORKSPACE + 'Data/from_exoplanetarchive/'
 DPATH += '1SWASP J192338.19-460631.5.fits'
@@ -53,11 +52,11 @@ DATACOL = 'MAG2'
 EDATACOL = 'MAG2_ERR'
 # -----------------------------------------------------------------------------
 # whether to bin data
-BINDATA = False
+BINDATA = True
 BINSIZE = 0.1
 # -----------------------------------------------------------------------------
 # sigma clipping options
-SIGMACLIP = False
+SIGMACLIP = True
 # size in pixels (actual size will be median separation between points * SIZE)
 SIZE = 100
 # sigma of the clip i.e. median(DATACOL) + sigma*std(DATACOL)
@@ -66,7 +65,7 @@ SIGMA = 2.0
 WEIGHTED = True
 # -----------------------------------------------------------------------------
 # uncertainty filter
-ERRORCLIP = False
+ERRORCLIP = True
 PERCENTAGE = 0.5
 # -----------------------------------------------------------------------------
 # periodogram constants
@@ -409,6 +408,8 @@ def period_arrows(frame, xarr=None, yarr=None, height=0.1, **kwargs):
     frame.set_ylim(0, np.max([height * 1.1 * 1.1, ymax]))
     # frame.arrow(xarr[i], yarr[i]+wspace, dx=0, dy=height, **kwargs)
     return frame
+
+
 
 
 # =============================================================================

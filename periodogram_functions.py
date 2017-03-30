@@ -29,7 +29,7 @@ np.random.seed(9)
 # Define periodogram functions
 # =============================================================================
 def lombscargle_periodogram(time, data, edata=None, freqs=None,
-                            samples_per_peak=5, nyquist_factor=5):
+                            samples_per_peak=5, nyquist_factor=5, norm=False):
     """
     Calculates the Lombscargle periodogram using astropy.stats
 
@@ -55,7 +55,10 @@ def lombscargle_periodogram(time, data, edata=None, freqs=None,
         freqs = LombScargle(time, data, dy=edata).autofrequency(**kwargs)
     power = LombScargle(time, data, dy=edata).power(freqs, normalization='psd')
 
-    npower = power * (len(time)-1)/2
+    if norm:
+        npower = power * (len(time)-1)/2
+    else:
+        npower= power
 
     return freqs, npower
 
@@ -214,16 +217,20 @@ def fap_montecarlo(periodfunction, fargs, fkwargs, N=1000, log=False,
         time, data = fargs
         # force turn off logging
         fkwargs['log'] = False
-        # force sampling and maximum peak
-        fkwargs['fmax'] = nyquist_factor
-        fkwargs['ppb'] = samples_per_peak
+        if 'freqs' not in fkwargs:
+            if fkwargs['freqs'] is not None:
+                # force sampling and maximum peak
+                fkwargs['fmax'] = nyquist_factor
+                fkwargs['ppb'] = samples_per_peak
         # set edata to none
         edata = None
     elif fname == 'lombscargle_periodogram':
         time, data, edata = fargs
-        # force sampling and maximum peak
-        fkwargs['nyquist_factor'] = nyquist_factor
-        fkwargs['samples_per_peak'] = samples_per_peak
+        if 'freqs' not in fkwargs:
+            if fkwargs['freqs'] is not None:
+                # force sampling and maximum peak
+                fkwargs['nyquist_factor'] = nyquist_factor
+                fkwargs['samples_per_peak'] = samples_per_peak
     else:
         raise Exception('Period function needs to be "lombscargle_periodogram"'
                         'or "clean_periodogram"')
@@ -300,7 +307,8 @@ def phase_fold(time, data, periods):
 # =============================================================================
 # Define peak finding functions
 # =============================================================================
-def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1):
+def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1,
+                 boxsize=5):
     """
     Finds the maximum peak in y (at point x if defined)
 
@@ -352,19 +360,30 @@ def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1):
     sort = np.argsort(x)
     x, y = x[sort], y[sort]
     # -------------------------------------------------------------------------
-    # mask by x_range
-    if x_range is None:
-        x_range = [x.min(), x.max()]
-    xmask = (x >= x_range[0]) & (x <= x_range[1])
-    xr, yr = x[xmask], y[xmask]
-    if np.sum(yr) == 0:
-        return np.repeat(np.nan, number), np.repeat(np.nan, number)
+    # # mask by x_range
+    # if x_range is None:
+    #     x_range = [x.min(), x.max()]
+    # xmask = (x > x_range[0]) & (x < x_range[1])
+    # xr, yr = x[xmask], y[xmask]
+    # if np.sum(yr) == 0:
+    #     return np.repeat(np.nan, number), np.repeat(np.nan, number)
     # -------------------------------------------------------------------------
     if kind == 'binpeak':
-        xpeaks, ypeaks = binmax(xr, yr, N=number, boxsize=5)
+        xpeaks, ypeaks = binmax(x, y, N=number, boxsize=boxsize)
     else:
         print('\n No peaks in xrange={0}'.format(x_range))
         raise ValueError("Kind {0} not supported.".format(kind))
+    # mask by x_range
+    xpeaks, ypeaks = np.array(xpeaks), np.array(ypeaks)
+    if x_range is None:
+        x_range = [x.min(), x.max()]
+    xmask = (xpeaks > x_range[0]) & (xpeaks < x_range[1])
+    xpeaks, ypeaks = xpeaks[xmask], ypeaks[xmask]
+    for i in range(number):
+        if i >= len(xpeaks):
+            xpeaks = np.append(xpeaks, np.nan)
+            ypeaks = np.append(xpeaks, np.nan)
+
     # -------------------------------------------------------------------------
     # return
     return xpeaks, ypeaks

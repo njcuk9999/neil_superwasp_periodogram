@@ -64,42 +64,11 @@ def ls_test(time_arr, data_arr, edata_arr, freq, nf, ssp):
     return freqs, lpower
 
 
-# =============================================================================
-# Start of code
-# =============================================================================
-# Main code here
-if __name__ == "__main__":
-    # ----------------------------------------------------------------------
-    # loading data
-    print('\n Loading data...')
-    lightcurve = fits.getdata(DPATH, ext=1)
-    # ----------------------------------------------------------------------
-    # get columns
-    time_arr = np.array(lightcurve[TIMECOL], dtype=float)
-    data_arr = np.array(lightcurve[DATACOL], dtype=float)
-    edata_arr = np.array(lightcurve[EDATACOL], dtype=float)
-
-
-    N = len(time_arr)
-    # ----------------------------------------------------------------------
-    # make combinations of nf, ssp and df
-    print('\n Calculating lombscargle for all combinations')
-    freq_arr, lpower_arr = [], []
-    combinations = list(itertools.product(nf_arr, ssp_arr, df_arr))
-    for combination in tqdm(combinations):
-        nf, ssp, df = combination
-        freqs = get_freq(df, N)
-        freqs, lpower = ls_test(time_arr, data_arr, edata_arr, freqs, nf, ssp)
-        freq_arr.append(freqs)
-        lpower_arr.append(lpower)
-    # ----------------------------------------------------------------------
-    # make grid graph
-    print('\n Making graph grid')
+def grid_plot(combinations, freq_arr, lpower_arr):
     rows = int(np.ceil(np.sqrt(len(combinations))))
     plt.close()
     fig, frames = plt.subplots(nrows=rows, ncols=rows)
-    ymin_all, xmin_all = 0.0, 0.0
-    ymax_all, xmax_all = 0.0, 0.0
+    ymin_all, ymax_all = 0.0, 0.0
     for row in tqdm(range(rows)):
         for col in range(rows):
             frame = frames[col][row]
@@ -117,12 +86,8 @@ if __name__ == "__main__":
                 xmin, xmax, ymin, ymax = frame.axis()
                 if ymin < ymin_all:
                     ymin_all = float(ymin)
-                if xmin < xmin_all:
-                    xmin_all = float(xmin)
                 if ymax > ymax_all:
                     ymax_all = float(ymax)
-                if xmax > xmax_all:
-                    xmax_all = float(xmax)
                 if row != 0:
                     frame.set_ylabel('')
                     frame.set_yticklabels([])
@@ -134,32 +99,21 @@ if __name__ == "__main__":
                 else:
                     frame.set_xlabel('Time / days')
 
-    # fig, frames = plt.subplots(nrows=rows, ncols=rows)
-    # xmin_all, xmax_all, ymin_all, ymax_all = 0.0, 0.0, 0.0, 0.0
-    # for row in range(rows):
-    #     for col in range(rows):
-    #         frame = frames[col][row]
-    #         frame.plot(100*np.random.random(100), 10*np.random.random(100)+50)
-    #         xmin, xmax, ymin, ymax = frame.axis()
-    #         if ymin < ymin_all: ymin_all = ymin
-    #         if xmin < xmin_all: xmin_all = xmin
-    #         if ymax > ymax_all: ymax_all = ymax
-    #         if xmax > xmax_all: xmax_all = xmax
-
-
     print('\n Matching yaxis...')
     for row in tqdm(range(rows)):
         for col in range(rows):
             frame = frames[col][row]
             frame.set_ylim(ymin_all, ymax_all)
-            frame.set_xlim(xmin_all, xmax_all)
+            frame.set_xlim(10**-3, 10**3)
             frame.set_xscale('log')
             frame.grid(True)
 
     plt.subplots_adjust(hspace=0, wspace=0)
     plt.show()
     plt.close()
-# ----------------------------------------------------------------------
+    return ymin_all, ymax_all
+
+
 def bindata(x, y, bins):
     binned_data = []
     for it in range(len(bins[:-1])):
@@ -171,71 +125,84 @@ def bindata(x, y, bins):
     return np.array(binned_data)
 
 
-# make density plots
-lbins = np.linspace(-3.0, 3.0, 100)
-bins = 10**lbins
-width = 1
-nf_arr = np.array(nf_arr)
-ssp_arr = np.array(ssp_arr)
-
-data1 = []
-for row in tqdm(range(rows)):
-    data_arr = np.zeros((width * rows, len(bins)-1))
-    for col in (range(rows)):
-        it = row + rows * col
-        if it >= len(combinations):
-            continue
-        bin_data = bindata(1.0/freq_arr[it], lpower_arr[it], bins)
-        # want data to be width wide and bindata long
-        for it in range(width):
-            data_arr[width*col + it] = bin_data
-    data1.append(data_arr)
-
-data2 = []
-for col in tqdm(range(rows)):
-    data_arr = np.zeros((width * rows, len(bins)-1))
-    for row in range(rows):
-        it = col + rows * row
-        if it >= len(combinations):
-            continue
-        bin_data = bindata(1.0/freq_arr[it], lpower_arr[it], bins)
-        # want data to be width wide and bindata long
-        for it in range(width):
-            data_arr[width*row + it] = bin_data
-    data2.append(data_arr)
-
-plt.close()
-fig, frames = plt.subplots(ncols=len(data1), nrows=1)
-for dt, data in enumerate(data1):
-    extent = [lbins.min(), lbins.max(), 0, len(ssp_arr)]
-    frames[dt].imshow(data, aspect='auto', extent=extent,
-                      vmin=ymin_all, vmax=ymax_all)
-    frames[dt].set_xlabel('Time / days')
-    xticks = frames[dt].get_xticks()
-    xticklabels = [r'10$^{' + '{0:.1f}'.format(i) + r'}$' for i in xticks]
-    frames[dt].set_xticklabels(xticklabels)
-    frames[dt].set_yticklabels(ssp_arr)
-    frames[dt].set_ylabel('Samples per peak')
-    frames[dt].set_title('Nyquist Frequency = {0}'.format(nf_arr[dt]))
+def density_plot(combinations, freq_arr, lpower_arr, ymin_all, ymax_all,
+                 vary_arr, variablelabel, independentlabel, axis=0):
+    rows = int(np.ceil(np.sqrt(len(combinations))))
+    lbins = np.linspace(-3.0, 3.0, 100)
+    bins = 10 ** lbins
+    vary_arr = np.array(vary_arr)
+    # bin up the lpower_arr data in the nyquest factor direction
+    # samples per peak varies along data
+    data1 = []
+    for row in tqdm(range(rows)):
+        data_arr = np.zeros((rows, len(bins) - 1))
+        for col in (range(rows)):
+            if axis == 0:
+                it = row + rows * col
+            if axis == 1:
+                it = col + rows * row
+            if it >= len(combinations):
+                continue
+            bin_data = bindata(1.0 / freq_arr[it], lpower_arr[it], bins)
+            # want data to be width wide and bindata long
+            data_arr[col] = bin_data
+        data1.append(data_arr)
+    # plot density plots with varying samples per peak
+    plt.close()
+    fig, frames = plt.subplots(ncols=len(data1), nrows=1)
+    for dt, data in enumerate(data1):
+        extent = [lbins.min(), lbins.max(), 0, len(vary_arr)]
+        frames[dt].imshow(data, aspect='auto', extent=extent,
+                          vmin=ymin_all, vmax=ymax_all, origin='lower')
+        frames[dt].set_xlabel('Time / days')
+        xticks = frames[dt].get_xticks()
+        xticklabels = [r'10$^{' + '{0:.1f}'.format(i) + r'}$' for i in xticks]
+        frames[dt].set_xticklabels(xticklabels)
+        frames[dt].set_yticklabels(ssp_arr)
+        frames[dt].set_ylabel(variablelabel)
+        frames[dt].set_title('{0} = {1}'.format(independentlabel, nf_arr[dt]))
+    plt.show()
+    plt.close()
 
 
-fig, frames = plt.subplots(ncols=len(data1), nrows=1)
-for dt, data in enumerate(data1):
-    extent = [lbins.min(), lbins.max(), 0, len(nf_arr)]
-    frames[dt].imshow(data, aspect='auto', extent=extent,
-                      vmin=ymin_all, vmax=ymax_all)
-    frames[dt].set_xlabel('Time / days')
-    xticks = frames[dt].get_xticks()
-    xticklabels = [r'10$^{' + '{0:.1f}'.format(i) + r'}$' for i in xticks]
-    frames[dt].set_xticklabels(xticklabels)
-    frames[dt].set_yticklabels(nf_arr)
-
-    frames[dt].set_ylabel('Nyquist Frequency')
-    frames[dt].set_title('Samples per peak = {0}'.format(ssp_arr[dt]))
-
-
-plt.show()
-plt.close()
+# =============================================================================
+# Start of code
+# =============================================================================
+# Main code here
+if __name__ == "__main__":
+    # ----------------------------------------------------------------------
+    # loading data
+    print('\n Loading data...')
+    lightcurve = fits.getdata(DPATH, ext=1)
+    # ----------------------------------------------------------------------
+    # get columns
+    time_arr = np.array(lightcurve[TIMECOL], dtype=float)
+    data_arr = np.array(lightcurve[DATACOL], dtype=float)
+    edata_arr = np.array(lightcurve[EDATACOL], dtype=float)
+    N = len(time_arr)
+    # ----------------------------------------------------------------------
+    # make combinations of nf, ssp and df
+    print('\n Calculating lombscargle for all combinations')
+    freq_arr, lpower_arr = [], []
+    combinations = list(itertools.product(nf_arr, ssp_arr, df_arr))
+    for combination in tqdm(combinations):
+        nf, ssp, df = combination
+        freqs = get_freq(df, N)
+        freqs, lpower = ls_test(time_arr, data_arr, edata_arr, freqs, nf, ssp)
+        freq_arr.append(freqs), lpower_arr.append(lpower)
+    # ----------------------------------------------------------------------
+    # make grid graph
+    print('\n Making graph grid')
+    ymin_all, ymax_all = grid_plot(combinations, freq_arr, lpower_arr)
+    # ----------------------------------------------------------------------
+    # make density plots axis 0 = ssp, axis 1 = nf
+    vary0 = 'Samples per peak'
+    vary1 = 'Nyquist Frequency'
+    print('\n Making density plot')
+    density_plot(combinations, freq_arr, lpower_arr, ymin_all, ymax_all,
+                 ssp_arr, vary0, vary1, axis=0)
+    density_plot(combinations, freq_arr, lpower_arr, ymin_all, ymax_all,
+                 nf_arr, vary1, vary0, axis=1)
 
 # =============================================================================
 # End of code

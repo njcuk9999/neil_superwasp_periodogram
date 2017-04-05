@@ -51,7 +51,7 @@ else:
     DATACOL = 'MAG2'
     EDATACOL = 'MAG2_ERR'
 # -----------------------------------------------------------------------------
-TEST_RUN = True
+TEST_RUN = False
 TEST_PERIOD = 3.28
 DT = None
 # -----------------------------------------------------------------------------
@@ -105,6 +105,7 @@ def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
     # -------------------------------------------------------------------------
     # plot periodogram
     kwargs = dict(title='Lomb-Scargle Periodogram',
+                  ylabel='Lomb-Scargle Power $P_N/P_{max}$',
                   xlabel='Time since {0}/ days'.format(day0), zorder=1)
     frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/lsfreq, lspower,
                                         **kwargs)

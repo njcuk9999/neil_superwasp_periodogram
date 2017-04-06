@@ -342,8 +342,11 @@ def calculation(time, data, edata, params):
     # calculate FAP at period
     if params['LOG']:
         print('Estimating significane of peaks...')
-    significance = pf2.inverse_fap_from_bootstrap(bsppeak, periodpower, dp=3)
-    results['significance'] = significance
+    # significance = pf2.inverse_fap_from_bootstrap(bsppeak, periodpower, dp=3)
+    # results['significance'] = significance
+    fap = pf2.fap_from_theory(time, periodpower)
+    results['false_alaram_prob'] = fap
+    results['significance'] = pf2.percentile2sigma(1.0 - fap)
     # -------------------------------------------------------------------------
     # calcuate phase data
     if params['LOG']:
@@ -448,7 +451,8 @@ def save_to_fit(results, params):
     if params['LOG']:
         print('\n Saving to fits file')
     periods = results['period']
-    sigs = results['significance']
+    fap = results['false_alaram_prob']
+    sig = results['significance']
     # name of object
     name = '{0}_{1}'.format(params['NAME'], params['EXT'])
     # load data if it exists
@@ -465,7 +469,7 @@ def save_to_fit(results, params):
         perioddata['name'] = [name]
         for p_it, period in enumerate(periods):
             perioddata['Peak{0}'.format(p_it+1)] = [period]
-            perioddata['Sig{0}'.format(p_it + 1)] = [sigs[p_it]]
+            perioddata['FAP{0}'.format(p_it + 1)] = [sigs[p_it]]
     # finally save the modified/new table over original table
     perioddata.write(params['PERIODPATH'], format='fits', overwrite=True)
     return 1

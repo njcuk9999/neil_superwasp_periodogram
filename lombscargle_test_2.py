@@ -79,6 +79,8 @@ BOXSIZE = 5
 THRESHOLD = 5.0
 # percentile (FAP) to cut peaks at (i.e. any below are not used)
 CUTPERCENTILE = pf2.sigma2percentile(1.0)*100
+# whether to normalise
+NORMALISE = False
 
 
 # =============================================================================
@@ -104,9 +106,14 @@ def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
     frames[0][1].set_xscale('log')
     # -------------------------------------------------------------------------
     # plot periodogram
-    kwargs = dict(title='Lomb-Scargle Periodogram',
-                  ylabel='Lomb-Scargle Power $P_N/P_{max}$',
-                  xlabel='Time since {0}/ days'.format(day0), zorder=1)
+    if NORMALISE:
+        kwargs = dict(title='Lomb-Scargle Periodogram',
+                      ylabel='Lomb-Scargle Power $P_N/P_{max}$',
+                      xlabel='Time since {0}/ days'.format(day0), zorder=1)
+    else:
+        kwargs = dict(title='Lomb-Scargle Periodogram',
+                      ylabel='Lomb-Scargle Power $P_N$',
+                      xlabel='Time since {0}/ days'.format(day0), zorder=1)
     frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/lsfreq, lspower,
                                         **kwargs)
     # add arrow to periodogram
@@ -114,7 +121,9 @@ def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
     frames[1][0] = pf2.add_arrows(frames[1][0], lsperiod, lspower, **kwargs)
     # add FAP lines to periodogram
     kwargs = dict(color='b', zorder=4)
-    frames[1][0] = pf2.add_fap_to_periodogram(frames[1][0], bsppeaks,
+    # frames[1][0] = pf2.add_fap_to_periodogram(frames[1][0], time, bsppeaks,
+    #                                           PERCENTILES, **kwargs)
+    frames[1][0] = pf2.add_fap_to_periodogram(frames[1][0], time, None,
                                               PERCENTILES, **kwargs)
     # plot bootstrap periodogram (noise periodogram)
     kwargs = dict(color='0.5', xlabel=None, ylabel=None, xlim=None, ylim=None,
@@ -142,6 +151,12 @@ def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
     plt.close()
 
 
+def normalise(x):
+    if NORMALISE:
+        return pf2.normalise(x)
+    else:
+        return x
+
 # =============================================================================
 # Start of code
 # =============================================================================
@@ -164,7 +179,7 @@ if __name__ == "__main__":
         time -= day0
     # -------------------------------------------------------------------------
     else:
-        kwargs = dict(N=30, T=TMAX, period=TEST_PERIOD, dt=DT,
+        kwargs = dict(num=15, timeamp=TMAX, period=TEST_PERIOD, dt=DT,
                       signal_to_noise=5,  random_state=583)
         time, data, edata = pf2.create_data(**kwargs)
         name = 'Test data, period={0}'.format(TEST_PERIOD)
@@ -176,13 +191,13 @@ if __name__ == "__main__":
     print('\n Calculating lombscargle...')
     kwargs = dict(fit_mean=True, fmin=1/TMAX, fmax=1/TMIN, samples_per_peak=SPP)
     lsfreq, lspower, ls = pf2.lombscargle(time, data, edata, **kwargs)
-    lspower = pf2.normalise(lspower)
+    lspower = normalise(lspower)
     # -------------------------------------------------------------------------
     # compute window function
     print('\n Calculating window function...')
     kwargs = dict(fmin=1 / TMAX, fmax=1 / TMIN, samples_per_peak=SPP)
     wffreq, wfpower = pf2.compute_window_function(time, **kwargs)
-    wfpower = pf2.normalise(wfpower)
+    wfpower = normalise(wfpower)
     # -------------------------------------------------------------------------
     # compute bootstrap of lombscargle
     print('\n Computing bootstrap...')
@@ -190,16 +205,16 @@ if __name__ == "__main__":
                   fit_mean=True, log=True, full=True)
     bsresults = pf2.lombscargle_bootstrap(time, data, edata, lsfreq, **kwargs)
     bsfreq, bspower, bsfpeak, bsppeak,  = bsresults
-    bspower = pf2.normalise(bspower)
-    bsppeak = pf2.normalise(bsppeak)
+    bspower = normalise(bspower)
+    bsppeak = normalise(bsppeak)
     # -------------------------------------------------------------------------
     # compute bootstrap of lombscargle
     print('\n Computing MCMC...')
-    kwargs = dict(N_iterations=N_BS, random_seed=RANDOM_SEED, norm='standard',
+    kwargs = dict(n_iterations=N_BS, random_seed=RANDOM_SEED, norm='standard',
                   fit_mean=True, log=True)
-    msfreq, mspower, _, _ = pf2.ls_montecarlo(time, data, edata, lsfreq,
-                                              **kwargs)
-    mspower = pf2.normalise(mspower)
+    args = [time, data, edata, lsfreq]
+    msfreq, mspower, msfpeak, msppeak = pf2.ls_montecarlo(*args, **kwargs)
+    mspower = normalise(mspower)
     # -------------------------------------------------------------------------
     # try to calculate true period
     print('Attempting to locate real peaks...')
@@ -207,11 +222,19 @@ if __name__ == "__main__":
     bsargs = dict(ppeaks=bsppeak, percentile=CUTPERCENTILE)
     msargs = dict(freq=msfreq, power=mspower, number=NPEAKS, boxsize=BOXSIZE,
                   threshold=THRESHOLD)
-    period = pf2.find_period(lsargs, bsargs, msargs)
+    period, periodpower = pf2.find_period(lsargs, bsargs, msargs)
     # -------------------------------------------------------------------------
     # calcuate phase data
     print('\n Computing phase curve...')
     phase, phasefit, powerfit = pf2.phase_data(ls, time, period)
+    # -------------------------------------------------------------------------
+    # calculate FAP at period
+    print('Estimating significane of peaks...')
+    # significance = pf2.inverse_fap_from_bootstrap(bsppeak, periodpower, dp=3)
+    # results['significance'] = significance
+    fap = pf2.fap_from_theory(time, periodpower)
+    print('false_alaram_prob={0}'.format(fap))
+    print('significance={0}'.format(pf2.percentile2sigma(1.0 - fap)))
     # -------------------------------------------------------------------------
     # plotting
     # -------------------------------------------------------------------------

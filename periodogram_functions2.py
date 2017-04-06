@@ -130,6 +130,25 @@ def phase_data(ls, time, period, offset=(-1, 1)):
     return phase, phase_fit, power_fit
 
 
+def fap_from_theory(time, power):
+    N = len(time)
+    power = np.array(power)
+    Meff = -6.363 + 1.193*N + 0.00098*N**2
+    lnprob = np.log(1 - power)*((N-3)/2)
+
+    FAP = 1 - (1-prob)**Meff
+    return FAP
+
+
+def power_from_prob(time, faps):
+    N = len(time)
+    faps = np.array(faps)
+    Meff = -6.363 + 1.193*N + 0.00098*N**2
+    prob = 1 - np.exp(np.log((1 - faps)*(1/Meff)))
+    power = 1 - (prob)**(2/(N-3))
+    return power
+
+
 # =============================================================================
 # Define Bootstrap functions
 # =============================================================================
@@ -415,6 +434,7 @@ def ls_montecarlo(time, data, edata, frequency_grid, n_iterations=100,
     fdays = np.mod(time, 1.0)
     tsize = len(time)
 
+    f_arr, d_arr = [], []
     for _ in __tqdmlog__(range(n_iterations), log):
         if randomize == 'mag':
             # randomise the mags but not the times
@@ -432,15 +452,17 @@ def ls_montecarlo(time, data, edata, frequency_grid, n_iterations=100,
 
         # combine power from monticarlo
         powers.append(power)
+        # add maximums
+        argmax = np.argmax(power)
+        f_arr.append(frequency_grid[argmax])
+        d_arr.append(power[argmax])
 
     # Assume Gaussian statistics median is True value
     # and can assign uncertainties on each power pixel
     median = np.percentile(powers, 50, axis=0)
     onesig_per = float(sigma2percentile(2.0))
-    upper = np.percentile(powers, onesig_per / 2.0 + 50, axis=0)
-    lower = np.percentile(powers, onesig_per / 2.0 + 0, axis=0)
 
-    return frequency_grid, median, upper, lower
+    return frequency_grid, median, f_arr, d_arr
 
 
 # =============================================================================
@@ -759,33 +781,34 @@ def add_arrows(frame, periods, power, **kwargs):
     return frame
 
 
-def add_fap_to_periodogram(frame, peaks=None, percentiles=95.0, **kwargs):
+def add_fap_to_periodogram(frame, time, peaks=None, percentiles=95.0, **kwargs):
     # deal with keyword arguments
     color = kwargs.get('color1', 'b')
     linestyle = kwargs.get('linestyle', 'dotted')
     zorder = kwargs.get('zorder', 2)
     if not hasattr(percentiles, '__len__'):
         percentiles = [percentiles]
-
     if peaks is not None:
         # calculate faps from bootstrap
         faps = false_alarm_probability_from_bootstrap(peaks, percentiles)
-        sigmas = []
-        # plot faps
-        for f, fap in enumerate(faps):
-            frame.axhline(fap, color=color, linestyle=linestyle, zorder=zorder)
-            # plot label
-            sigma = '{0:.2f}'.format(percentile2sigma(percentiles[f] / 100.0))
-            sigmas.append(sigma)
-            # xmin, xmax, ymin, ymax = frame.axis()
-            # frame.annotate(sigma + '$\sigma$', xy=(xmax*1.1, fap),
-            #                xytext=(xmax*1.1, fap), zorder=20,
-            #                fontdict=dict(color=color))
-        xmin, xmax, ymin, ymax = frame.axis()
-        frame1 = frame.twinx()
-        frame1.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
-        frame1.set_yticks(faps)
-        frame1.set_yticklabels([i + '$\sigma$' for i in sigmas])
+    else:
+        # calculate faps theoretically
+        faps = power_from_prob(time, percentiles)
+
+    sigmas = []
+    # plot faps
+    for f, fap in enumerate(faps):
+        frame.axhline(fap, color=color, linestyle=linestyle, zorder=zorder)
+        # plot label
+        sigma = '{0:.2f}'.format(percentile2sigma(percentiles[f] / 100.0))
+        sigmas.append(sigma)
+    xmin, xmax, ymin, ymax = frame.axis()
+    frame1 = frame.twinx()
+    frame1.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+    frame1.set_yticks(faps)
+    frame1.set_yticklabels([i + '$\sigma$' for i in sigmas])
+
+
     # return frame
     return frame
 

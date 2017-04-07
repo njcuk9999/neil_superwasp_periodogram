@@ -55,20 +55,18 @@ SHOW = False
 FIGSIZE = (20, 16)
 # decide whether to plot nan periods (saves time)
 PLOT_NAN_PERIOD = True
-# Name the object manually
-NAME = None
 # whether to log progress to standard output (print)
 LOG = True
 # -----------------------------------------------------------------------------
-# minimum time period to be sensitive to
-TMIN = 0.1
-# maximum time period to be sensitive to
+# minimum time period to be sensitive to (5 hours)
+TMIN = 5/24.0
+# maximum time period to be sensitive to (100 days)
 TMAX = 100
 # number of samples per peak
-SPP = 10
+SPP = 5
 # -----------------------------------------------------------------------------
 # random seed for bootstrapping
-RANDOM_SEED = 9
+RANDOM_SEED = 9999
 # number of bootstraps to perform
 N_BS = 100
 # Phase offset
@@ -191,9 +189,10 @@ if __name__ == "__main__":
     # loop around SIDs
     for sid in do_sids:
         # add SID to argument string
-        argumentstring += ' SID={0}'.format(sid)
+        argumentstring += ' SID="{0}"'.format(sid)
         # run python program for file
         os.system(COMMAND + argumentstring)
+        # input('Enter to continue. Control+C to cancel')
 
 
 # =============================================================================

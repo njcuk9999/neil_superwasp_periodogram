@@ -180,6 +180,12 @@ def get_params():
                         params[name] = array_from_string(value, name,
                                                          fmts[name][0],
                                                          fmts[name][1])
+                    # need to deal with booleans
+                    elif fmts[name][0] == bool:
+                        if value == 'False':
+                            params[name] = False
+                        else:
+                            params[name] = True
                     # all Nones must be string format (as we have no way to tell
                     # what they should be)
                     elif isinstance(None, fmts[name][0]):
@@ -227,6 +233,7 @@ def load_data(params):
         day0 = np.floor(time.min() / 100) * 100
         time -= day0
         params['DAY0'] = day0
+        params['NAME'] = params['SID']
     # -----------------------------------------------------------------------
     elif not params['TEST_RUN']:
         # loading data
@@ -254,7 +261,7 @@ def load_data(params):
             params['NAME'] = 'Test_Data_p={0}'.format(params['TEST_PERIOD'])
         params['DAY0'] = 0
     # -----------------------------------------------------------------------
-    return time, data, edata
+    return time, data, edata, params
 
 
 def get_sub_regions(time, params):
@@ -274,6 +281,12 @@ def update_progress(params):
 
 
 def calculation(time, data, edata, params):
+
+    # calculate frequency
+    freq = pf2.make_frequency_grid(time, fmin=1.0/TMAX, fmax=1.0/TMIN,
+                                   samples_per_peak=SPP)
+    # zero data
+    data = data - np.median(data)
     # zero time data to nearest thousand (start at 0 in steps of days)
     day0 = np.floor(time.min() / 100) * 100
     time -= day0
@@ -283,8 +296,8 @@ def calculation(time, data, edata, params):
     # make combinations of nf, ssp and df
     if params['LOG']:
         print('\n Calculating lombscargle...')
-    kwargs = dict(fit_mean=True, fmin=1/params['TMAX'], fmax=1/params['TMIN'],
-                  samples_per_peak=params['SPP'])
+    # kwargs = dict(fit_mean=True, fmin=1/TMAX, fmax=1/TMIN, samples_per_peak=SPP)
+    kwargs = dict(fit_mean=True, freq=freq)
     lsfreq, lspower, ls = pf2.lombscargle(time, data, edata, **kwargs)
     lspower = pf2.normalise(lspower)
     results['lsfreq'] = lsfreq
@@ -293,8 +306,8 @@ def calculation(time, data, edata, params):
     # compute window function
     if params['LOG']:
         print('\n Calculating window function...')
-    kwargs = dict(fmin=1 / params['TMAX'], fmax=1 / params['TMIN'],
-                  samples_per_peak=params['SPP'])
+    # kwargs = dict(fmin=1 / TMAX, fmax=1 / TMIN, samples_per_peak=SPP)
+    kwargs = dict(freq=freq)
     wffreq, wfpower = pf2.compute_window_function(time, **kwargs)
     wfpower = pf2.normalise(wfpower)
     results['wffreq'] = wffreq
@@ -417,8 +430,10 @@ def plot_graph(time, data, edata, results, params):
     frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/bsfreq, bspower,
                                         **kwargs)
 
+    # renormalise the noise periodogram to the lspower
+    mspower = np.max(lspower) * mspower / np.max(mspower)
     # plot MCMC periodogram (noise periodogram)
-    kwargs = dict(color='m', xlabel=None, ylabel=None, xlim=None, ylim=None,
+    kwargs = dict(color='r', xlabel=None, ylabel=None, xlim=None, ylim=None,
                   zorder=2)
     frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/msfreq, mspower,
                                         **kwargs)
@@ -451,8 +466,8 @@ def save_to_fit(results, params):
     if params['LOG']:
         print('\n Saving to fits file')
     periods = results['period']
-    fap = results['false_alaram_prob']
-    sig = results['significance']
+    faps = results['false_alaram_prob']
+    sigs = results['significance']
     # name of object
     name = '{0}_{1}'.format(params['NAME'], params['EXT'])
     # load data if it exists
@@ -461,7 +476,9 @@ def save_to_fit(results, params):
         # add this data to the table
         row = [name]
         for p_it, period in enumerate(periods):
-            row.append(period), row.append(sigs[p_it])
+            row.append(period)
+            row.append(faps[p_it])
+            row.append(sigs[p_it])
         perioddata.add_row(row)
     # else create a new table and populate it
     else:
@@ -469,7 +486,8 @@ def save_to_fit(results, params):
         perioddata['name'] = [name]
         for p_it, period in enumerate(periods):
             perioddata['Peak{0}'.format(p_it+1)] = [period]
-            perioddata['FAP{0}'.format(p_it + 1)] = [sigs[p_it]]
+            perioddata['FAP{0}'.format(p_it + 1)] = [faps[p_it]]
+            perioddata['sig{0}'.format(p_it + 1)] = [sigs[p_it]]
     # finally save the modified/new table over original table
     perioddata.write(params['PERIODPATH'], format='fits', overwrite=True)
     return 1
@@ -485,7 +503,7 @@ if __name__ == "__main__":
     pp = get_params()
     # -------------------------------------------------------------------------
     # Load data
-    time_arr, data_arr, edata_arr = load_data(pp)
+    time_arr, data_arr, edata_arr, pp = load_data(pp)
     # -------------------------------------------------------------------------
     # find sub regions
     masks, names = get_sub_regions(time_arr, pp)
@@ -508,7 +526,6 @@ if __name__ == "__main__":
         # ---------------------------------------------------------------------
         # save periods to file
         save_to_fit(res, pp)
-
         # input('Enter to continue. Control+C to cancel')
 
 

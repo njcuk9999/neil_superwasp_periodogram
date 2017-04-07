@@ -18,6 +18,8 @@ from astropy import units as u
 from astropy.stats import LombScargle
 from scipy.special import erf, erfinv
 from photutils import find_peaks
+import mpmath
+import sys
 
 # =============================================================================
 # Define variables
@@ -31,6 +33,14 @@ PLOTSIGMA = 5
 # =============================================================================
 # Define Periodogram functions
 # =============================================================================
+def make_frequency_grid(t, fmin, fmax, samples_per_peak):
+    f0 = fmin
+    df = 1 / (t.max() - t.min()) / samples_per_peak
+    Nf = int(np.ceil((fmax - f0) / df))
+    f = f0 + df * np.arange(Nf)
+    return f
+
+
 def lombscargle(time, data, edata=None, fit_mean=True, fmin=100, fmax=1.0,
                 samples_per_peak=10, norm='standard', freq=None):
     """
@@ -80,7 +90,8 @@ def lombscargle(time, data, edata=None, fit_mean=True, fmin=100, fmax=1.0,
     return freq, power, ls
 
 
-def compute_window_function(time, fmin=100, fmax=1.0, samples_per_peak=10):
+def compute_window_function(time, fmin=100, fmax=1.0, samples_per_peak=10,
+                            freq=None):
     """
     Get the window function from the time vector (using Lomb-Scargle)
 
@@ -97,9 +108,12 @@ def compute_window_function(time, fmin=100, fmax=1.0, samples_per_peak=10):
     :return:
     """
     ls = LombScargle(time, 1, fit_mean=False, center_data=False)
-    freq, power = ls.autopower(minimum_frequency=fmin,
-                               maximum_frequency=fmax,
-                               samples_per_peak=samples_per_peak)
+    if freq is None:
+        freq, power = ls.autopower(minimum_frequency=fmin,
+                                   maximum_frequency=fmax,
+                                   samples_per_peak=samples_per_peak)
+    else:
+        power = ls.power(freq)
     return freq, power
 
 
@@ -134,19 +148,30 @@ def fap_from_theory(time, power):
     N = len(time)
     power = np.array(power)
     Meff = -6.363 + 1.193*N + 0.00098*N**2
-    lnprob = np.log(1 - power)*((N-3)/2)
+    prob = (1 - power)**mpmath.mpf((N-3)/2)
 
-    FAP = 1 - (1-prob)**Meff
-    return FAP
+    FAP = 1 - (1-prob)**mpmath.mpf(Meff)
+
+    FAP[FAP < (sys.float_info.min * 10)] = 0
+
+    return np.array(FAP, dtype=float)
 
 
-def power_from_prob(time, faps):
+def power_from_prob(time, faps=None, percentiles=None):
+    if faps is None and percentiles is None:
+        raise ValueError("Need to define either faps or percentiles")
+    if faps is None:
+        faps = 1 - np.array(percentiles)/100.0
+
     N = len(time)
     faps = np.array(faps)
     Meff = -6.363 + 1.193*N + 0.00098*N**2
-    prob = 1 - np.exp(np.log((1 - faps)*(1/Meff)))
-    power = 1 - (prob)**(2/(N-3))
-    return power
+    prob = 1 - (1 - faps)**mpmath.mpf(1/Meff)
+    power = 1 - (prob)**mpmath.mpf(2/(N-3))
+
+    power[power < (sys.float_info.min * 10)] = 0
+
+    return np.array(power, dtype=float)
 
 
 # =============================================================================
@@ -793,7 +818,7 @@ def add_fap_to_periodogram(frame, time, peaks=None, percentiles=95.0, **kwargs):
         faps = false_alarm_probability_from_bootstrap(peaks, percentiles)
     else:
         # calculate faps theoretically
-        faps = power_from_prob(time, percentiles)
+        faps = power_from_prob(time, percentiles=percentiles)
 
     sigmas = []
     # plot faps

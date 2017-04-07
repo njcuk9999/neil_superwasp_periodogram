@@ -20,17 +20,18 @@ try:
 except ModuleNotFoundError:
     raise Exception("Program requires 'periodogram_functions.py'")
 from scipy.special import erf, erfinv
-
+from fast_bgls import bgls_fast
 
 # =============================================================================
 # Define variables
 # =============================================================================
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP/"
 # Deal with choosing a target and data paths
-Elodie = False
+Elodie = True
 if Elodie:
-    SID = 'GJ1289'
+    # SID = 'GJ1289'
     # SID = 'GJ793'
+    SID = 'ARG_54'
     TIMECOL = "time"
     DATACOL = "flux"
     EDATACOL = "eflux"
@@ -39,8 +40,8 @@ if Elodie:
         DPATH = WORKSPACE + "Data/Elodie/bl_gj1289.fits"
     elif SID == 'GJ793':
         DPATH = WORKSPACE + "Data/Elodie/bl_gj793.fits"
-    else:
-        DPATH = None
+    elif SID == 'ARG_54':
+        DPATH = WORKSPACE + 'Data/Elodie/ARG_54_lightcurve.fits'
 else:
     # set file paths
     DPATH = WORKSPACE + 'Data/from_exoplanetarchive/'
@@ -60,7 +61,7 @@ TMIN = 0.1
 # maximum time period to be sensitive to
 TMAX = 100
 # number of samples per peak
-SPP = 10
+SPP = 5
 # random seed for bootstrapping
 RANDOM_SEED = 9
 # number of bootstraps to perform
@@ -87,11 +88,11 @@ NORMALISE = False
 # Define functions
 # =============================================================================
 def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
-               lsperiod, bsppeaks, bsfreq, bspower, msfreq, mspower, phase,
-               phasefit, powerfit):
+               lsperiod, bsppeaks, bsfreq, bspower, msfreq, mspower, bperiods,
+               bpeaks, phase, phasefit, powerfit):
     plt.close()
     plt.style.use('seaborn-whitegrid')
-    fig, frames = plt.subplots(2, 2, figsize=(16, 16))
+    fig, frames = plt.subplots(nrows=2, ncols=2, figsize=(16, 16))
     # -------------------------------------------------------------------------
     # plot raw data
     kwargs = dict(xlabel='Time since {0}/ days'.format(day0),
@@ -132,8 +133,9 @@ def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
                                         **kwargs)
 
     # plot MCMC periodogram (noise periodogram)
-    kwargs = dict(color='m', xlabel=None, ylabel=None, xlim=None, ylim=None,
+    kwargs = dict(color='r', xlabel=None, ylabel=None, xlim=None, ylim=None,
                   zorder=2)
+    mspower = np.max(lspower)*mspower/np.max(mspower)
     frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/msfreq, mspower,
                                         **kwargs)
     frames[1][0].set_xscale('log')
@@ -145,6 +147,15 @@ def plot_graph(time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
     frames[1][1] = pf2.plot_phased_curve(*args, **kwargs)
     frames[1][1].set_ylim(*frames[1][1].get_ylim()[::-1])
     # -------------------------------------------------------------------------
+    # # plot bayesian
+    # frames[2][0].plot(bperiods, bpeaks, color='k')
+    # frames[2][0].set(xscale='log', yscale='log',
+    #                  title='Bayesian Generalised Lomb-scargle',
+    #                  ylabel='Probability',
+    #                  xlabel='Time since {0}/ days'.format(day0))
+    #
+    # frames[2][1].axis('off')
+
     # save show close
     plt.subplots_adjust(hspace=0.3)
     plt.show()
@@ -187,15 +198,22 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     # Calculation
     # -------------------------------------------------------------------------
+    # calculate frequency
+    freq = pf2.make_frequency_grid(time, fmin=1.0/TMAX, fmax=1.0/TMIN,
+                                   samples_per_peak=SPP)
+
+    data = data - np.median(data)
     # make combinations of nf, ssp and df
     print('\n Calculating lombscargle...')
-    kwargs = dict(fit_mean=True, fmin=1/TMAX, fmax=1/TMIN, samples_per_peak=SPP)
+    # kwargs = dict(fit_mean=True, fmin=1/TMAX, fmax=1/TMIN, samples_per_peak=SPP)
+    kwargs = dict(fit_mean=True, freq=freq)
     lsfreq, lspower, ls = pf2.lombscargle(time, data, edata, **kwargs)
     lspower = normalise(lspower)
     # -------------------------------------------------------------------------
     # compute window function
     print('\n Calculating window function...')
-    kwargs = dict(fmin=1 / TMAX, fmax=1 / TMIN, samples_per_peak=SPP)
+    # kwargs = dict(fmin=1 / TMAX, fmax=1 / TMIN, samples_per_peak=SPP)
+    kwargs = dict(freq=freq)
     wffreq, wfpower = pf2.compute_window_function(time, **kwargs)
     wfpower = normalise(wfpower)
     # -------------------------------------------------------------------------
@@ -203,7 +221,7 @@ if __name__ == "__main__":
     print('\n Computing bootstrap...')
     kwargs = dict(n_bootstraps=N_BS, random_seed=RANDOM_SEED, norm='standard',
                   fit_mean=True, log=True, full=True)
-    bsresults = pf2.lombscargle_bootstrap(time, data, edata, lsfreq, **kwargs)
+    bsresults = pf2.lombscargle_bootstrap(time, data, edata, freq, **kwargs)
     bsfreq, bspower, bsfpeak, bsppeak,  = bsresults
     bspower = normalise(bspower)
     bsppeak = normalise(bsppeak)
@@ -212,9 +230,14 @@ if __name__ == "__main__":
     print('\n Computing MCMC...')
     kwargs = dict(n_iterations=N_BS, random_seed=RANDOM_SEED, norm='standard',
                   fit_mean=True, log=True)
-    args = [time, data, edata, lsfreq]
+    args = [time, data, edata, freq]
     msfreq, mspower, msfpeak, msppeak = pf2.ls_montecarlo(*args, **kwargs)
     mspower = normalise(mspower)
+    # # -------------------------------------------------------------------------
+    # # compute bayesian lombscargle
+    # print('\n Calculating Bayesian generalised LS periodogram')
+    # bperiod, bprob = bgls_fast(time, data, edata, freq=freq, log=True)
+    bperiod, bprob = None, None
     # -------------------------------------------------------------------------
     # try to calculate true period
     print('Attempting to locate real peaks...')
@@ -235,13 +258,21 @@ if __name__ == "__main__":
     fap = pf2.fap_from_theory(time, periodpower)
     print('false_alaram_prob={0}'.format(fap))
     print('significance={0}'.format(pf2.percentile2sigma(1.0 - fap)))
+
+    fap_theory = pf2.power_from_prob(time, percentiles=PERCENTILES)
+    fap_bs = pf2.false_alarm_probability_from_bootstrap(bsppeak, PERCENTILES)
+    for p_it in range(len(PERCENTILES)):
+        arg = [PERCENTILES[p_it], fap_theory[p_it], fap_bs[p_it]]
+        print('percentile={0:.6f}\t fap_theory={1:.3e}\t'
+              'fap_bootstrap={2:.3e}'.format(*arg))
+
     # -------------------------------------------------------------------------
     # plotting
     # -------------------------------------------------------------------------
     print('\n Plotting graph...')
     plotargs = [time, data, edata, name, wffreq, wfpower, lsfreq, lspower, day0,
-                period, bsppeak, bsfreq, bspower, msfreq, mspower, phase,
-                phasefit, powerfit]
+                period, bsppeak, bsfreq, bspower, msfreq, mspower, bperiod,
+                bprob, phase, phasefit, powerfit]
     plot_graph(*plotargs)
 
 

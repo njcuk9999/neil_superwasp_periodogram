@@ -37,7 +37,7 @@ SKIP_DONE = True
 # Write to file (if false does not save to file)
 WRITE_TO_FILE = True
 # Reset - resets all files (i.e. deletes fits and graphs)
-RESET = True
+RESET = False
 # -----------------------------------------------------------------------------
 # set database settings
 FROM_DATABASE = True
@@ -113,20 +113,25 @@ def load_pre_existing_data(sids, dpath):
     :param dpath: string, filepath to the pre-existing data
     :return:
     """
-    if os.path.exists(PERIODPATH) and SKIP_DONE and WRITE_TO_FILE:
+    if os.path.exists(dpath) and SKIP_DONE and WRITE_TO_FILE:
         print("\n Loading pre existing files...")
         atable = Table.read(dpath)
         done_ids = list(atable['name'])
         del atable
         # ---------------------------------------------------------------------
         # skip sids if the are in table (assume this means they are done)
-        do_ids, skips = [], 0
+        do_ids, done_sids = [], []
         for done_id in done_ids:
-            raw_id = done_id.split('Full')[0].split('Region')[0]
-            if raw_id not in sids:
-                do_ids.append(raw_id)
-            else:
+            raw_id = done_id.split('_Full')[0].split('_R')[0]
+            done_sids.append(raw_id)
+        done_sids = np.unique(done_sids)
+
+        skips = 0
+        for sid in sids:
+            if sid in done_sids:
                 skips += 1
+            else:
+                do_ids.append(sid)
 
         # Print statement for how many files skipped due to pre existing data
         print('\n Skipping {0} sids'.format(skips))
@@ -187,7 +192,9 @@ if __name__ == "__main__":
     argumentstring = get_arguments_from_constants()
     # -------------------------------------------------------------------------
     # loop around SIDs
-    for sid in do_sids:
+    for s_it, sid in enumerate(do_sids):
+        # print progress
+        print('\n{0}\n\t {1} of {2} \n{0}'.format('+'*50, s_it+1, len(do_sids)))
         # add SID to argument string
         argumentstring += ' SID="{0}"'.format(sid)
         # run python program for file

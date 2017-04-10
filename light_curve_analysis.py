@@ -88,6 +88,7 @@ PASSWORD = '1234'
 DATABASE = 'swasp'
 TABLE = 'swasp_sep16_tab'
 SID = 'BPC_46A'
+SID = 'ABD_101A'
 # -----------------------------------------------------------------------------
 # whether to show the graph
 SHOW = False
@@ -100,12 +101,12 @@ NAME = SID
 # whether to log progress to standard output (print)
 LOG = True
 # -----------------------------------------------------------------------------
-# minimum time period to be sensitive to
-TMIN = 0.1
-# maximum time period to be sensitive to
+# minimum time period to be sensitive to (5 hours)
+TMIN = 5/24.0
+# maximum time period to be sensitive to (100 days)
 TMAX = 100
 # number of samples per peak
-SPP = 10
+SPP = 5
 # -----------------------------------------------------------------------------
 # random seed for bootstrapping
 RANDOM_SEED = 9
@@ -280,17 +281,21 @@ def update_progress(params):
         print('{0}\n\t{1}\n{0}'.format(*pargs))
 
 
-def calculation(time, data, edata, params):
+def calculation(inputs, params, mask=None):
 
-    # calculate frequency
-    freq = pf2.make_frequency_grid(time, fmin=1.0/TMAX, fmax=1.0/TMIN,
-                                   samples_per_peak=SPP)
+    # format time (days from first time)
+    time, data, edata, day0 = format_time_days_from_first(*inputs, mask=mask)
+    params['day0'] = day0
     # zero data
     data = data - np.median(data)
-    # zero time data to nearest thousand (start at 0 in steps of days)
-    day0 = np.floor(time.min() / 100) * 100
-    time -= day0
-    params['DAY0'] = day0
+    # calculate frequency
+    freq = pf2.make_frequency_grid(time, fmin=1.0/params['TMAX'],
+                                   fmax=1.0/params['TMIN'],
+                                   samples_per_peak=params['SPP'])
+    # large frequency grid will take a long time or cause a segmentation fault
+    nfreq = len(freq)
+    if nfreq > 100000:
+        raise ValueError("Error: frequency grid too large ({0})".format(nfreq))
     # results
     results = dict()
     # make combinations of nf, ssp and df
@@ -342,7 +347,7 @@ def calculation(time, data, edata, params):
     # -------------------------------------------------------------------------
     # try to calculate true period
     if params['LOG']:
-        print('Attempting to locate real peaks...')
+        print('\n Attempting to locate real peaks...')
     lsargs = dict(freq=lsfreq, power=lspower, number=params['NPEAKS'],
                   boxsize=params['BOXSIZE'])
     bsargs = dict(ppeaks=bsppeak, percentile=params['CUTPERCENTILE'])
@@ -354,7 +359,7 @@ def calculation(time, data, edata, params):
     # -------------------------------------------------------------------------
     # calculate FAP at period
     if params['LOG']:
-        print('Estimating significane of peaks...')
+        print('\n Estimating significane of peaks...')
     # significance = pf2.inverse_fap_from_bootstrap(bsppeak, periodpower, dp=3)
     # results['significance'] = significance
     fap = pf2.fap_from_theory(time, periodpower)
@@ -369,12 +374,47 @@ def calculation(time, data, edata, params):
     results['phasefit'] = phasefit
     results['powerfit'] = powerfit
     # -------------------------------------------------------------------------
-    return results, params
+    inputs = [time, data, edata]
+    # -------------------------------------------------------------------------
+    return inputs, results, params
 
 
-def plot_graph(time, data, edata, results, params):
+def format_time_days_from_first(time, data, edata, mask=None):
+
+    if mask is None:
+        mask = np.repeat([True], len(time))
+
     # zero time data to nearest thousand (start at 0 in steps of days)
-    time -= params['DAY0']
+    day0 = np.floor(time[mask].min() / 100) * 100
+    day1 = np.ceil(time[mask].max() / 100) * 100
+    # there should be no time series longer than 10000 but some data has
+    # weird times i.e. 32 days and 2454340 days hence if time series
+    # seems longer than 10000 days cut it by the median days
+    if (day1 - day0) > 1e5:
+        day0 = np.median(time[mask]) - 5000
+        day1 = np.median(time[mask]) + 5000
+        # make sure we have no days beyond maximum day
+        limitmask = (time > day0) & (time < day1)
+        time = time[limitmask & mask]
+        data = data[limitmask & mask]
+        if edata is not None:
+            edata = edata[limitmask & mask]
+    else:
+        time = time[mask]
+        data = data[mask]
+        edata = edata[mask]
+    # zero time data to nearest thousand (start at 0 in steps of days)
+    day0 = np.floor(time.min() / 100) * 100
+    # time should be time since first observation
+    time -= day0
+
+    # return time
+    return time, data, edata, day0
+
+
+def plot_graph(inputs, results, params):
+    # get inputs
+    time, data, edata = inputs
     # extract variables from results
     wffreq, wfpower = results['wffreq'], results['wfpower']
     lsfreq, lspower = results['lsfreq'], results['lspower']
@@ -519,10 +559,11 @@ if __name__ == "__main__":
         update_progress(pp)
         # ---------------------------------------------------------------------
         # Calculation
-        res, pp = calculation(time_arr[m], data_arr[m], edata_arr[m], pp)
+        inp = time_arr, data_arr, edata_arr
+        inp, res, pp = calculation(inp, pp, m)
         # ---------------------------------------------------------------------
         # plotting
-        plot_graph(time_arr[m], data_arr[m], edata_arr[m], res, pp)
+        plot_graph(inp, res, pp)
         # ---------------------------------------------------------------------
         # save periods to file
         save_to_fit(res, pp)

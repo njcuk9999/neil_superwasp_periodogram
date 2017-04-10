@@ -85,6 +85,16 @@ def lombscargle(time, data, edata=None, fit_mean=True, fmin=100, fmax=1.0,
     else:
         power = ls.power(freq, normalization=norm)
 
+    # # undo normalisation
+    # w = 1 / edata ** 2
+    # w /= w.sum()
+    # y = data - np.dot(w, data**2)
+    # YY = np.dot(w, y**2)
+    # power = power * YY
+    #
+    # # normalise by inverse variance
+    # power = power / np.std(data)**2
+
     # Return the auto generated frequencies and the normalised power
     # and the lombscargle instance
     return freq, power, ls
@@ -156,6 +166,13 @@ def fap_from_theory(time, power):
 
     return np.array(FAP, dtype=float)
 
+    # M = len(freq)
+    # # probability p of observing a power less than or equal to P0
+    # p = 1 - mpmath.exp(-maxpower)
+    # # probability of seeing at least one sapmle exceeding this value
+    # pv = 1 - p**mpmath.mpf(M)
+    # # return pv
+
 
 def power_from_prob(time, faps=None, percentiles=None):
     if faps is None and percentiles is None:
@@ -172,6 +189,9 @@ def power_from_prob(time, faps=None, percentiles=None):
     power[power < (sys.float_info.min * 10)] = 0
 
     return np.array(power, dtype=float)
+
+
+
 
 
 # =============================================================================
@@ -545,25 +565,30 @@ def find_period(lsargs, bsargs=None, msargs=None):
 
     :return:
     """
-    lsfreq, lspower = lsargs['freq'], lsargs['power']
+    ls_freq, ls_power = lsargs['freq'], lsargs['power']
     boxsize, number = lsargs['boxsize'], lsargs['number']
-    lstime = np.array(1.0 / lsfreq)
-    sort = np.argsort(lstime)
-    lstime, lspower = lstime[sort], lspower[sort]
+    ls_time = np.array(1.0 / ls_freq)
+    sort = np.argsort(ls_time)
+    ls_time, ls_power = ls_time[sort], ls_power[sort]
     try:
-        lstime, lspower = filter_by_bootstrap(lstime, lspower, bsargs)
-        lstime, lspower = filter_by_mcmc(lstime, lspower, msargs)
-        if len(lstime) == 0:
+        ls_time, ls_power = filter_by_bootstrap(ls_time, ls_power, bsargs)
+        ls_time, ls_power = filter_by_mcmc(ls_time, ls_power, msargs)
+        if len(ls_time) == 0:
             raise KeyError()
+        elif len(ls_time) == 1:
+            period, power = [ls_time[0]], [ls_power[0]]
         else:
-            period, power = find_y_peaks(lstime, lspower, boxsize=boxsize,
+            period, power = find_y_peaks(ls_time, ls_power, boxsize=boxsize,
                                          number=number)
     except KeyError:
-        argmax = np.argmax(lspower)
-        period = lsargs['freq'][argmax]
-        power = lsargs['power'][argmax]
-        period = [period] + list(np.repeat([np.nan], number - 1))
-        power = [power] + list(np.repeat([np.nan], number - 1))
+        argmax = np.argmax(lsargs['power'])
+        period = [1.0/lsargs['freq'][argmax]]
+        power = [lsargs['power'][argmax]]
+
+    temp_n = len(period)
+    if temp_n < number:
+        period = period + list(np.repeat([np.nan], number - temp_n))
+        power = power + list(np.repeat([np.nan], number - temp_n))
     return period, power
 
 

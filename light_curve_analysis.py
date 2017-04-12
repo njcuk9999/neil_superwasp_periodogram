@@ -88,7 +88,7 @@ PASSWORD = '1234'
 DATABASE = 'swasp'
 TABLE = 'swasp_sep16_tab'
 SID = 'BPC_46A'
-SID = 'ABD_101A'
+SID = 'TWA_8A'
 # -----------------------------------------------------------------------------
 # whether to show the graph
 SHOW = False
@@ -134,6 +134,8 @@ MINPOINTS = 50   # points
 MAXGAP = 20  # days
 # extention for subgroup
 EXT = ''
+# how to normalise all powers
+NORMALISATION = None
 
 
 # =============================================================================
@@ -304,7 +306,7 @@ def calculation(inputs, params, mask=None):
     # kwargs = dict(fit_mean=True, fmin=1/TMAX, fmax=1/TMIN, samples_per_peak=SPP)
     kwargs = dict(fit_mean=True, freq=freq)
     lsfreq, lspower, ls = pf2.lombscargle(time, data, edata, **kwargs)
-    lspower = pf2.normalise(lspower)
+    lspower = pf2.normalise(lspower, NORMALISATION)
     results['lsfreq'] = lsfreq
     results['lspower'] = lspower
     # -------------------------------------------------------------------------
@@ -314,24 +316,28 @@ def calculation(inputs, params, mask=None):
     # kwargs = dict(fmin=1 / TMAX, fmax=1 / TMIN, samples_per_peak=SPP)
     kwargs = dict(freq=freq)
     wffreq, wfpower = pf2.compute_window_function(time, **kwargs)
-    wfpower = pf2.normalise(wfpower)
+    wfpower = pf2.normalise(wfpower, NORMALISATION)
     results['wffreq'] = wffreq
     results['wfpower'] = wfpower
     # -------------------------------------------------------------------------
     # compute bootstrap of lombscargle
-    if params['LOG']:
-        print('\n Computing bootstrap...')
-    kwargs = dict(n_bootstraps=params['N_BS'],
-                  random_seed=params['RANDOM_SEED'], norm='standard',
-                  fit_mean=True, log=params['LOG'], full=True)
-    bsresults = pf2.lombscargle_bootstrap(time, data, edata, lsfreq, **kwargs)
-    bsfreq, bspower, bsfpeak, bsppeak,  = bsresults
-    bspower = pf2.normalise(bspower)
-    bsppeak = pf2.normalise(bsppeak)
-    results['bsfreq'] = bsfreq
-    results['bspower'] = bspower
-    results['bsfpeak'] = bsfpeak
-    results['bsppeak'] = bsppeak
+    # if params['LOG']:
+    #     print('\n Computing bootstrap...')
+    # kwargs = dict(n_bootstraps=params['N_BS'],
+    #               random_seed=params['RANDOM_SEED'], norm='standard',
+    #               fit_mean=True, log=params['LOG'], full=True)
+    # bsresults = pf2.lombscargle_bootstrap(time, data, edata, lsfreq, **kwargs)
+    # bsfreq, bspower, bsfpeak, bsppeak,  = bsresults
+    # bspower = pf2.normalise(bspower, NORMALISATION)
+    # bsppeak = pf2.normalise(bsppeak, NORMALISATION)
+    # results['bsfreq'] = bsfreq
+    # results['bspower'] = bspower
+    # results['bsfpeak'] = bsfpeak
+    # results['bsppeak'] = bsppeak
+    results['bsfreq'] = None
+    results['bspower'] = None
+    results['bsfpeak'] = None
+    results['bsppeak'] = None
     # -------------------------------------------------------------------------
     # compute bootstrap of lombscargle
     if params['LOG']:
@@ -341,7 +347,7 @@ def calculation(inputs, params, mask=None):
                   fit_mean=True, log=params['LOG'])
     msfreq, mspower, _, _ = pf2.ls_montecarlo(time, data, edata, lsfreq,
                                               **kwargs)
-    mspower = pf2.normalise(mspower)
+    mspower = pf2.normalise(mspower, NORMALISATION)
     results['msfreq'] = msfreq
     results['mspower'] = mspower
     # -------------------------------------------------------------------------
@@ -350,26 +356,20 @@ def calculation(inputs, params, mask=None):
         print('\n Attempting to locate real peaks...')
     lsargs = dict(freq=lsfreq, power=lspower, number=params['NPEAKS'],
                   boxsize=params['BOXSIZE'])
-    bsargs = dict(ppeaks=bsppeak, percentile=params['CUTPERCENTILE'])
+    # bsargs = dict(ppeaks=bsppeak, percentile=params['CUTPERCENTILE'])
+    bsargs = None
     msargs = dict(freq=msfreq, power=mspower, number=params['NPEAKS'],
                   boxsize=params['BOXSIZE'], threshold=params['THRESHOLD'])
-    period, periodpower = pf2.find_period(lsargs, bsargs, msargs)
-    results['period'] = period
-    results['power_at_period'] = periodpower
-    # -------------------------------------------------------------------------
-    # calculate FAP at period
-    if params['LOG']:
-        print('\n Estimating significane of peaks...')
-    # significance = pf2.inverse_fap_from_bootstrap(bsppeak, periodpower, dp=3)
-    # results['significance'] = significance
-    fap = pf2.fap_from_theory(time, periodpower)
-    results['false_alaram_prob'] = fap
-    results['significance'] = pf2.percentile2sigma(1.0 - fap)
+    presults = pf2.find_period(lsargs, bsargs, msargs)
+    results['periods'] = presults[0]
+    results['power_periods'] = presults[1]
+    results['nperiods'] = presults[2]
+    results['noise_power_periods'] = presults[3]
     # -------------------------------------------------------------------------
     # calcuate phase data
     if params['LOG']:
         print('\n Computing phase curve...')
-    phase, phasefit, powerfit = pf2.phase_data(ls, time, period)
+    phase, phasefit, powerfit = pf2.phase_data(ls, time, results['periods'])
     results['phase'] = phase
     results['phasefit'] = phasefit
     results['powerfit'] = powerfit
@@ -418,8 +418,8 @@ def plot_graph(inputs, results, params):
     # extract variables from results
     wffreq, wfpower = results['wffreq'], results['wfpower']
     lsfreq, lspower = results['lsfreq'], results['lspower']
-    period, bsppeaks = results['period'], results['bsppeak']
-    bsfreq, bspower = results['bsfreq'], results['bspower']
+    period, bsppeaks = results['periods'], results['bsppeak']
+    # bsfreq, bspower = results['bsfreq'], results['bspower']
     msfreq, mspower = results['msfreq'], results['mspower']
     phase = results['phase']
     phasefit, powerfit = results['phasefit'], results['powerfit']
@@ -460,15 +460,15 @@ def plot_graph(inputs, results, params):
     # add arrow to periodogram
     kwargs = dict(firstcolor='r', normalcolor='b', zorder=4)
     frames[1][0] = pf2.add_arrows(frames[1][0], period, lspower, **kwargs)
-    # add FAP lines to periodogram
-    kwargs = dict(color='b', zorder=4)
-    frames[1][0] = pf2.add_fap_to_periodogram(frames[1][0], bsppeaks,
-                                              params['PERCENTILES'], **kwargs)
+    # # add FAP lines to periodogram
+    # kwargs = dict(color='b', zorder=4)
+    # frames[1][0] = pf2.add_fap_to_periodogram(frames[1][0], bsppeaks,
+    #                                           params['PERCENTILES'], **kwargs)
     # plot bootstrap periodogram (noise periodogram)
-    kwargs = dict(color='0.5', xlabel=None, ylabel=None, xlim=None, ylim=None,
-                  zorder=0, alpha=0.25)
-    frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/bsfreq, bspower,
-                                        **kwargs)
+    # kwargs = dict(color='0.5', xlabel=None, ylabel=None, xlim=None, ylim=None,
+    #               zorder=0, alpha=0.25)
+    # frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/bsfreq, bspower,
+    #                                     **kwargs)
 
     # renormalise the noise periodogram to the lspower
     mspower = np.max(lspower) * mspower / np.max(mspower)
@@ -505,9 +505,8 @@ def save_to_fit(results, params):
     # print update if logging on
     if params['LOG']:
         print('\n Saving to fits file')
-    periods = results['period']
-    faps = results['false_alaram_prob']
-    sigs = results['significance']
+    periods, powers = results['periods'], results['power_periods']
+    nperiods, npowers = results['nperiods'], results['noise_power_periods']
     # name of object
     name = '{0}_{1}'.format(params['NAME'], params['EXT'])
     # load data if it exists
@@ -515,19 +514,21 @@ def save_to_fit(results, params):
         perioddata = Table.read(params['PERIODPATH'])
         # add this data to the table
         row = [name]
-        for p_it, period in enumerate(periods):
-            row.append(period)
-            row.append(faps[p_it])
-            row.append(sigs[p_it])
+        for p_it in range(len(periods)):
+            row.append(periods[p_it])
+            row.append(powers[p_it])
+            row.append(nperiods[p_it])
+            row.append(npowers[p_it])
         perioddata.add_row(row)
     # else create a new table and populate it
     else:
         perioddata = Table()
         perioddata['name'] = [name]
-        for p_it, period in enumerate(periods):
-            perioddata['Peak{0}'.format(p_it+1)] = [period]
-            perioddata['FAP{0}'.format(p_it + 1)] = [faps[p_it]]
-            perioddata['sig{0}'.format(p_it + 1)] = [sigs[p_it]]
+        for p_it in range(len((periods))):
+            perioddata['Peak{0}'.format(p_it+1)] = [periods[p_it]]
+            perioddata['Power{0}'.format(p_it+1)] = [powers[p_it]]
+            perioddata['nPeak{0}'.format(p_it + 1)] = [nperiods[p_it]]
+            perioddata['nPower{0}'.format(p_it + 1)] = [npowers[p_it]]
     # finally save the modified/new table over original table
     perioddata.write(params['PERIODPATH'], format='fits', overwrite=True)
     return 1

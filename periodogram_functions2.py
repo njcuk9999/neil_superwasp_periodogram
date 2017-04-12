@@ -495,17 +495,21 @@ def ls_montecarlo(time, data, edata, frequency_grid, n_iterations=100,
             # run lombscargle
             _, power, _ = lombscargle(rtime, data, edata, **kwargs)
 
-        # combine power from monticarlo
-        powers.append(power)
-        # add maximums
-        argmax = np.argmax(power)
-        f_arr.append(frequency_grid[argmax])
-        d_arr.append(power[argmax])
+        if len(power) > 0:
+            # combine power from monticarlo
+            powers.append(power)
+            # add maximums
+            argmax = np.argmax(power)
+            f_arr.append(frequency_grid[argmax])
+            d_arr.append(power[argmax])
 
     # Assume Gaussian statistics median is True value
     # and can assign uncertainties on each power pixel
-    median = np.percentile(powers, 50, axis=0)
-    onesig_per = float(sigma2percentile(2.0))
+    if len(power) > 0:
+        median = np.percentile(powers, 50, axis=0)
+    else:
+        median = np.repeat([np.nan], len(frequency_grid))
+    # onesig_per = float(sigma2percentile(2.0))
 
     return frequency_grid, median, f_arr, d_arr
 
@@ -571,8 +575,9 @@ def find_period(lsargs, bsargs=None, msargs=None):
     sort = np.argsort(ls_time)
     ls_time, ls_power = ls_time[sort], ls_power[sort]
     try:
-        ls_time, ls_power = filter_by_bootstrap(ls_time, ls_power, bsargs)
-        ls_time, ls_power = filter_by_mcmc(ls_time, ls_power, msargs)
+        # ls_time, ls_power = filter_by_bootstrap(ls_time, ls_power, bsargs)
+        mcmcr = filter_by_mcmc(ls_time, ls_power, msargs)
+        ls_time, ls_power, nperiod, npower = mcmcr
         if len(ls_time) == 0:
             raise KeyError()
         elif len(ls_time) == 1:
@@ -583,13 +588,19 @@ def find_period(lsargs, bsargs=None, msargs=None):
     except KeyError:
         argmax = np.argmax(lsargs['power'])
         period = [1.0/lsargs['freq'][argmax]]
-        power = [lsargs['power'][argmax]]
+        power = [-999]
+        nperiod, npower = np.repeat([-999], number), np.repeat([-999], number)
 
     temp_n = len(period)
     if temp_n < number:
         period = period + list(np.repeat([np.nan], number - temp_n))
         power = power + list(np.repeat([np.nan], number - temp_n))
-    return period, power
+    temp_n = len(nperiod)
+    if temp_n < number:
+        nperiod = nperiod + list(np.repeat([np.nan], number - temp_n))
+        npower = npower + list(np.repeat([np.nan], number - temp_n))
+
+    return period, power, nperiod, npower
 
 
 def filter_by_bootstrap(lstime, lspower, bsargs):
@@ -619,8 +630,8 @@ def filter_by_mcmc(lstime, lspower, msargs):
             mstime, mspower = mstime[sort], mspower[sort]
             boxsize, number = msargs['boxsize'], msargs['number']
             threshold = msargs['threshold'] / 100.0
-            msperiods, _ = find_y_peaks(mstime, mspower, number=number,
-                                        boxsize=boxsize)
+            msperiods, mspowers = find_y_peaks(mstime, mspower, number=number,
+                                               boxsize=boxsize)
             for msperiod in msperiods:
                 if np.isnan(msperiod):
                     continue
@@ -630,7 +641,8 @@ def filter_by_mcmc(lstime, lspower, msargs):
                 lstime, lspower = lstime[~mask], lspower[~mask]
         except KeyError:
             print('Keyword arguments for mcmc filter not satisfied')
-    return lstime, lspower
+            msperiods, mspowers = [], []
+    return lstime, lspower, msperiods, mspowers
 
 
 def find_y_peaks(x=None, y=None, x_range=None, kind='binpeak', number=1,
@@ -717,28 +729,31 @@ def binmax(x, y, num=1, boxsize=5):
     data = np.array([y, y])
     threshold = np.median(y)
     tbl = find_peaks(data, threshold, box_size=boxsize)
-    # mask out one of the rows
-    mask = tbl['y_peak'] == 0
-    tbl = tbl[mask]
-    # get the columns from the table and sort the tbl by peak value
-    ypeak = np.array(tbl['peak_value'])
-    xindices = np.array(tbl['x_peak'])
-    xpeak = x[xindices]
-    peaksort = np.argsort(ypeak)[::-1]
-    xpeak, ypeak = xpeak[peaksort], ypeak[peaksort]
-    # deal with there being less than N peaks
-    if len(xpeak) < num:
-        xpeaki, ypeaki = np.array(xpeak), np.array(ypeak)
-        xpeak, ypeak = [], []
-        for xpi in range(num):
-            if xpi < len(xpeaki):
-                xpeak.append(xpeaki[xpi])
-                ypeak.append(ypeaki[xpi])
-            else:
-                xpeak.append(np.nan)
-                ypeak.append(np.nan)
-    # return the N largest peaks
-    return xpeak[:num], ypeak[:num]
+    if type(tbl) == Table:
+        # mask out one of the rows
+        mask = tbl['y_peak'] == 0
+        tbl = tbl[mask]
+        # get the columns from the table and sort the tbl by peak value
+        ypeak = np.array(tbl['peak_value'])
+        xindices = np.array(tbl['x_peak'])
+        xpeak = x[xindices]
+        peaksort = np.argsort(ypeak)[::-1]
+        xpeak, ypeak = xpeak[peaksort], ypeak[peaksort]
+        # deal with there being less than N peaks
+        if len(xpeak) < num:
+            xpeaki, ypeaki = np.array(xpeak), np.array(ypeak)
+            xpeak, ypeak = [], []
+            for xpi in range(num):
+                if xpi < len(xpeaki):
+                    xpeak.append(xpeaki[xpi])
+                    ypeak.append(ypeaki[xpi])
+                else:
+                    xpeak.append(np.nan)
+                    ypeak.append(np.nan)
+        # return the N largest peaks
+        return xpeak[:num], ypeak[:num]
+    else:
+        return np.repeat([np.nan], num), np.repeat([np.nan], num),
 
 
 # =============================================================================
@@ -1211,8 +1226,13 @@ def create_data(num: int, timeamp=4, signal_to_noise=5, period=1.0,
     return t, y, dy
 
 
-def normalise(x):
-    return x / np.max(x)
+def normalise(x, kind):
+    if len(x) == 0:
+        return x
+    if kind == 'max':
+        return x / np.max(x)
+    else:
+        return x
 
 
 def sigma2percentile(sigma):

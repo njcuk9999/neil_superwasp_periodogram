@@ -88,7 +88,7 @@ PASSWORD = '1234'
 DATABASE = 'swasp'
 TABLE = 'swasp_sep16_tab'
 SID = 'BPC_46A'
-SID = 'TWA_8A'
+# SID = 'TWA_8A'
 # -----------------------------------------------------------------------------
 # whether to show the graph
 SHOW = False
@@ -534,6 +534,16 @@ def save_to_fit(results, params):
     return 1
 
 
+def scargle_fap(FAP, data, freq):
+    import mpmath
+    var = np.std(data)**2
+
+    Ni = len(freq)
+
+    prob = 1 - (1 - np.exp(-FAP/var))**Ni
+
+    return prob
+
 # =============================================================================
 # Start of code
 # =============================================================================
@@ -568,7 +578,7 @@ if __name__ == "__main__":
         # ---------------------------------------------------------------------
         # save periods to file
         save_to_fit(res, pp)
-        # input('Enter to continue. Control+C to cancel')
+        input('Enter to continue. Control+C to cancel')
 
 
 # =============================================================================

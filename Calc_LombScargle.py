@@ -16,6 +16,10 @@ from astropy.stats import LombScargle
 from astropy.table import Table
 from astropy import units as u
 from tqdm import tqdm
+try:
+    import periodogram_functions2 as pf2
+except ModuleNotFoundError:
+    raise Exception("Program requires 'periodogram_functions.py'")
 
 # =============================================================================
 # Define variables
@@ -60,30 +64,49 @@ def monte_carlo_ls(time, freq, data, edata):
     rng = np.random.RandomState(9)
     # sample with replacement
     num = 100
-    # generate samples
-    print('\n Generating samples...')
-    monte_carlos = np.zeros((num, len(time)))
-    for i in tqdm(range(len(time))):
-         monte_carlos[:, i] = np.random.normal(data[i], edata[i], size=num)
+
+
+    # real lombscargle
+    lspower = calc_LombScargle_astropy(time, freq, data)
+
+    # do the lombscargles
+    maxpowers, maxfreqs = [], []
+    print('\n Running monte carlo')
 
     for j in tqdm(range(num)):
-        # sample with replacement
-        resample = rng.randint(0, len(data), len(data))
+        newdata = [np.random.normal(data[i], edata[i], size=1)[0]
+                   for i in range(len(time))]
+        newdata = np.array(newdata)
+        #newdata = data
+        resample = rng.randint(0, len(newdata), len(newdata))
         # define the Lomb Scargle with resampled data and using frequency_grid
-        monte_carlos[j] = data[resample]
-    # do the lombscargles
-    maxpowers = []
-    print('\n Running monte carlo')
-    for j in tqdm(range(num)):
-        # define the Lomb Scargle with resampled data and using frequency_grid
-        mcpower = calc_LombScargle_astropy(time, freq, monte_carlos[j])
-        plt.plot(1./freq, mcpower)
+        mcpower = calc_LombScargle_astropy(time, freq, newdata)
+        mcpower = calc_LombScargle_astropy(time, freq, newdata[resample])
         # get the maximum power
-        maxpowers.append(np.max(mcpower))
+        argmax = np.argmax(mcpower)
+        maxpowers.append(mcpower[argmax])
+        maxfreqs.append(freq[argmax])
     # plot CDF
     X2 = np.sort(maxpowers)
-    F2 = np.array(range(num))/float(num)
-    plt.plot(X2, 1 - F2)
+    CDF = 1 - np.array(range(num))/float(num)
+
+    import matplotlib.pyplot as plt
+    plt.close()
+    fig, frames = plt.subplots(ncols=1, nrows=2)
+    frames[0].plot(1.0/freq, lspower, color='r' ,zorder=1, linewidth=0.5)
+    [frames[0].vlines(1.0/maxfreqs[i], 0, maxpowers[i], zorder=2)
+     for i in range(len(maxpowers))]
+    frames[0].set(xscale='log', yscale='log',
+                  xlabel='Time / days', ylabel='Power',
+                  title='MCMC magnitudes')
+
+    for sig in [1, 2, 3]:
+        sigma = pf2.sigma2percentile(sig)
+        fap = np.percentile(maxpowers, sigma*100)
+        frames[0].axhline(fap, linestyle='--', color='blue')
+
+    frames[1].plot(X2, 1 - CDF)
+    frames[1].set(xlabel='Power', ylabel='Cumulatative Probability')
     plt.show()
     plt.close()
 
@@ -92,7 +115,7 @@ def monte_carlo_ls(time, freq, data, edata):
 # =============================================================================
 # Main code here
 if __name__ == "__main__":
-
+    pass
 # ----------------------------------------------------------------------
 
 # =============================================================================

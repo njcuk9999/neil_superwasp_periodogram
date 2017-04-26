@@ -62,6 +62,23 @@ def num_from_dms(string):
     return hours + minutes/60.0 + seconds/3600.0
 
 
+def concat_tables():
+    # get files to merge
+    filenames = os.listdir(DPATH2)
+    stilts = 'java -jar /home/neil/bin/topcat/topcat-full.jar -stilts'
+    # construct command
+    outpath = DPATH2 + DFILE2 + '.fits'
+    command = '{0} tcat ifmt="fits" out="{1}" in='.format(stilts, outpath)
+    # get in command from filelist
+    instr = '"'
+    for filename in filenames:
+        if DFILE2 in filename and filename != DFILE2:
+            instr += "{0}{1} ".format(DPATH2, filename)
+    instr += '"'
+    # run command
+    os.system(command + instr)
+
+
 # =============================================================================
 # Start of code
 # =============================================================================
@@ -72,7 +89,7 @@ if __name__ == "__main__":
     # loop around files
     print('\n Extracting rows...')
     names_array, tiles_array = [], []
-    for filename in tqdm(filenames[:2]):
+    for filename in tqdm(filenames):
         # only consider .tbl files
         if '.tbl' not in filename:
             continue

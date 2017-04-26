@@ -41,6 +41,11 @@ PERIODCOLS = ['Period_A', 'Period_B', 'Period_C']
 DATACOL = 'MAG2'
 EDATACOL = 'MAG2_ERR'
 
+# record results
+RECORD = False
+# do a single object
+SINGLE_OBJECT = True
+SID = 'BPC_46A'
 # -----------------------------------------------------------------------------
 # Phase offset
 OFFSET = (-0.5, 0.5)
@@ -129,11 +134,17 @@ if __name__ == "__main__":
     # loop around each name
     uinputs = []
     for row in range(len(names)):
-        # row mask False skip
-        if ~mask[row]:
-            continue
+        # if not single object mode
+        if not SINGLE_OBJECT:
+            # row mask False skip
+            if ~mask[row]:
+                continue
+        else:
+            if names[row] != SID:
+                continue
         # get SID/name
         pp['SID'] = names[row]
+        print('{0}\n Analsising {1} \n{0}'.format('='*50, pp['SID']))
         # get data
         time_arr, data_arr, edata_arr, pp = lca.load_data(pp)
         # set up figure
@@ -156,14 +167,17 @@ if __name__ == "__main__":
         plt.show()
         plt.close()
         # use options dict to read result into uinputs
-        selected_option = options[a.result]
-        uinputs.append(selected_option)
-
-    # load up table
-    table = Table.read(DPATH)
-    table[SELECTIONCOL][mask] = uinputs
-    table[FLAGCOL] = np.array(table[SELECTIONCOL] == 1.0, dtype=bool)
-    table.write(DPATH, format='fits', overwrite=True)
+        if a.result == 0:
+            uinputs.append(np.nan)
+        else:
+            selected_option = options[a.result]
+            uinputs.append(selected_option)
+    if RECORD:
+        # load up table
+        table = Table.read(DPATH)
+        table[SELECTIONCOL][mask] = uinputs
+        table[FLAGCOL] = np.array(table[SELECTIONCOL] == 1.0, dtype=bool)
+        table.write(DPATH, format='fits', overwrite=True)
 
 # =============================================================================
 # End of code

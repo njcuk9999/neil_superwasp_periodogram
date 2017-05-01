@@ -470,7 +470,7 @@ def ls_montecarlo(time, data, edata, frequency_grid, n_iterations=100,
     rng = np.random.RandomState(random_seed)
 
     if log:
-        print('\n Computing Monte Carlo LS periodogram...')
+        print('\n Computing noise LS periodogram...')
     kwargs = dict(fit_mean=fit_mean, freq=frequency_grid, norm=norm)
     # loop around N_iterations
     powers = []
@@ -925,6 +925,24 @@ def plot_phased_curve(frame, phase, data, edata, phase_fit, power_fit, offset,
     if title is not None:
         frame.set_title(title)
     # return
+    return frame
+
+
+def add_fap_lines_to_periodogram(frame, sigmas, faps, **kwargs):
+    # deal with keyword arguments
+    color = kwargs.get('color', 'b')
+    linestyle = kwargs.get('linestyle', 'dotted')
+    zorder = kwargs.get('zorder', 2)
+    # plot faps
+    for f, fap in enumerate(faps):
+        frame.axhline(fap, color=color, linestyle=linestyle, zorder=zorder)
+    xmin, xmax, ymin, ymax = frame.axis()
+    frame1 = frame.twinx()
+    frame1.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+    frame1.set_yticks(faps)
+    frame1.set_yticklabels([str(i) + '$\sigma$' for i in sigmas])
+    frame1.tick_params(axis='y', colors=color)
+    # return frame
     return frame
 
 

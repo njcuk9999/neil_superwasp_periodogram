@@ -28,9 +28,9 @@ except ImportError:
 # Define variables
 # =============================================================================
 # type of run
-# TYPE = "Normal"
+TYPE = "Normal"
 # TYPE = "DATABASE"
-TYPE = "Elodie"
+# TYPE = "Elodie"
 # -----------------------------------------------------------------------------
 # Deal with choosing a target and data paths
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP/"
@@ -60,10 +60,10 @@ else:
     PLOTPATH = WORKSPACE + '/Plots/Messina_like_plots_from_exoarchive/'
     # Column info
     TIMECOL = 'HJD'
-    DATACOL = 'MAG2'
-    EDATACOL = 'MAG2_ERR'
+    DATACOL = 'TAMMAG2'
+    EDATACOL = 'TAMMAG2_ERR'
     SID = "1SWASP J192338.19-460631.5"
-# --------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # set database settings
 HOSTNAME = 'localhost'
 USERNAME = 'root'
@@ -92,7 +92,7 @@ SPP = 5
 # random seed for bootstrapping
 RANDOM_SEED = 9
 # number of bootstraps to perform
-N_BS = 100
+N_BS = 500
 # Phase offset
 OFFSET = (-0.1, 0.1)
 # -----------------------------------------------------------------------------
@@ -113,6 +113,21 @@ MAXGAP = 20  # days
 EXT = ''
 # how to normalise all powers
 NORMALISATION = None
+
+# -----------------------------------------------------------------------------
+LIMIT_RANGE = False
+RANGE_LOW = 3700
+RANGE_HIGH = 4000
+# -----------------------------------------------------------------------------
+TEST = True
+TEST_PERIOD = 3.2
+# number of days to observe
+TEST_TMAX = 800
+# number of observations across TMAX to select
+TEST_N = 100
+# edata uncertainty (amplitude of signal is set to 1)
+TEST_AMP = 1.0
+TEST_NOISE = 0.1
 
 
 # =============================================================================
@@ -197,7 +212,14 @@ def array_from_string(string, name, fmtarray, fmtelement):
 
 def load_data(params):
     # loading data
-    if params['TYPE'] == "DATABASE":
+    if TEST:
+        params['NAME'] = "TEST P={0}".format(TEST_PERIOD)
+        time, data, edata = test_data(show=False)
+        # zero time data to nearest thousand (start at 0 in steps of days)
+        day0 = np.floor(time.min() / 100) * 100
+        time -= day0
+        params['DAY0'] = day0
+    elif params['TYPE'] == "DATABASE":
         print('\n Loading data...')
         sid = params['SID']
         sql_kwargs = dict(host=params['HOSTNAME'], db=params['DATABASE'],
@@ -209,10 +231,6 @@ def load_data(params):
         time = np.array(pdata[params['TIMECOL']], dtype=float)
         data = np.array(pdata[params['DATACOL']], dtype=float)
         edata = np.array(pdata[params['EDATACOL']], dtype=float)
-        # zero time data to nearest thousand (start at 0 in steps of days)
-        day0 = np.floor(time.min() / 100) * 100
-        time -= day0
-        params['DAY0'] = day0
         params['NAME'] = params['SID']
     else:
         print('\n Loading data...')
@@ -224,11 +242,21 @@ def load_data(params):
         time = np.array(lightcurve[params['TIMECOL']], dtype=float)
         data = np.array(lightcurve[params['DATACOL']], dtype=float)
         edata = np.array(lightcurve[params['EDATACOL']], dtype=float)
-        # zero time data to nearest thousand (start at 0 in steps of days)
+    # zero time data to nearest thousand (start at 0 in steps of days)
+    day0 = np.floor(time.min() / 100) * 100
+    time -= day0
+    params['DAY0'] = day0
+    # zero data (by median value)
+    data = data - np.median(data)
+
+    # -------------------------------------------------------------------------
+    if LIMIT_RANGE:
+        mask = np.arange(RANGE_LOW, RANGE_HIGH, 1)
+        time, data, edata = time[mask], data[mask], edata[mask]
         day0 = np.floor(time.min() / 100) * 100
         time -= day0
         params['DAY0'] = day0
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     return time, data, edata, params
 
 
@@ -253,8 +281,6 @@ def calculation(inputs, params, mask=None):
     # format time (days from first time)
     time, data, edata, day0 = format_time_days_from_first(*inputs, mask=mask)
     params['day0'] = day0
-    # zero data
-    data = data - np.median(data)
     # calculate frequency
     freq = pf2.make_frequency_grid(time, fmin=1.0/params['TMAX'],
                                    fmax=1.0/params['TMIN'],
@@ -285,12 +311,12 @@ def calculation(inputs, params, mask=None):
     results['wffreq'] = wffreq
     results['wfpower'] = wfpower
     # -------------------------------------------------------------------------
-    # compute bootstrap of lombscargle
+    # compute noise periodogram
     kwargs = dict(n_iterations=params['N_BS'],
                   random_seed=params['RANDOM_SEED'], norm='standard',
                   fit_mean=True, log=params['LOG'])
-    msfreq, mspower, _, _ = pf2.ls_montecarlo(time, data, edata, lsfreq,
-                                              **kwargs)
+    msfreq, mspower, _, _ = pf2.ls_noiseperiodogram(time, data, edata, lsfreq,
+                                                    **kwargs)
     mspower = pf2.normalise(mspower, NORMALISATION)
     results['msfreq'] = msfreq
     results['mspower'] = mspower
@@ -376,8 +402,8 @@ def plot_graph(inputs, results, params):
     fig, frames = plt.subplots(2, 2, figsize=(params['FIGSIZE']))
     # -------------------------------------------------------------------------
     # plot raw data
-    kwargs = dict(xlabel='Time since {0}/ days'.format(params['DAY0']),
-                  ylabel='Magnitude',
+    kwargs = dict(xlabel='Time / days',
+                  ylabel='$\Delta$ TAM Magnitude',
                   title='Raw data for {0}'.format(name))
     frames[0][0] = pf2.plot_rawdata(frames[0][0], time, data, edata, **kwargs)
     frames[0][0].set_ylim(*frames[0][0].get_ylim()[::-1])
@@ -385,7 +411,8 @@ def plot_graph(inputs, results, params):
     # plot window function
     if 'wffreq' in results and 'wfpower' in results:
         wffreq, wfpower = results['wffreq'], results['wfpower']
-        kwargs = dict(title='Window function')
+        kwargs = dict(title='Window function',
+                      ylabel='Lomb-Scargle Power $P_N$')
         frames[0][1] = pf2.plot_periodogram(frames[0][1], 1.0/wffreq, wfpower,
                                             **kwargs)
         frames[0][1].set_xscale('log')
@@ -394,8 +421,8 @@ def plot_graph(inputs, results, params):
     if 'lsfreq' in results and 'lspower' in results:
         lsfreq, lspower = results['lsfreq'], results['lspower']
         kwargs = dict(title='Lomb-Scargle Periodogram',
-                      ylabel='Lomb-Scargle Power $P_N/P_{max}$',
-                      xlabel='Time since {0}/ days'.format(params['DAY0']),
+                      ylabel='Lomb-Scargle Power $P_N$',
+                      xlabel='Time / days',
                       zorder=1)
         frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/lsfreq, lspower,
                                             **kwargs)
@@ -410,9 +437,8 @@ def plot_graph(inputs, results, params):
     # plot MCMC periodogram (noise periodogram)
     if ('lsfreq' in results and 'lspower' in results and
         'msfreq' in results and 'mspower' in results):
-        lsfreq, lspower = results['lsfreq'], results['lspower']
         msfreq, mspower = results['msfreq'], results['mspower']
-        mspower = np.max(lspower) * mspower / np.max(mspower)
+        # mspower = np.max(lspower) * mspower / np.max(mspower)
         kwargs = dict(color='r', xlabel=None, ylabel=None, xlim=None, ylim=None,
                       zorder=2)
         frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/msfreq, mspower,
@@ -420,20 +446,37 @@ def plot_graph(inputs, results, params):
         frames[1][0].set_xscale('log')
     # -------------------------------------------------------------------------
     # Plot FAP lines
+    lsfreq= results['lsfreq']
     pargs1 = dict(color='b', linestyle='--')
     if 'theoryFAPpower' in results:
-        tfap_power = res['theoryFAPpower']
+        tfap_power = results['theoryFAPpower']
         sigmas = list(tfap_power.keys())
         faps = list(tfap_power.values())
         pf2.add_fap_lines_to_periodogram(frames[1][0], sigmas, faps, **pargs1)
 
+    pargs1 = dict(color='g', linestyle='--')
+    if 'bsFAPpower' in results:
+        bfap_power = results['bsFAPpower']
+        bs_power = results['bs_power']
+        sigmas = list(bfap_power.keys())
+        faps = list(bfap_power.values())
+        pf2.add_fap_lines_to_periodogram(frames[1][0], sigmas, faps, **pargs1)
+
+        # kwargs = dict(color='g', xlabel=None, ylabel=None, xlim=None, ylim=None,
+        #               zorder=2)
+        # frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/lsfreq, bs_power,
+        #                                     **kwargs)
     pargs1 = dict(color='c', linestyle='--')
     if 'mcFAPpower' in results:
-        mfap_power = res['mcFAPpower']
+        mfap_power = results['mcFAPpower']
+        ms_power = results['ms_power']
         sigmas = list(mfap_power.keys())
         faps = list(mfap_power.values())
         pf2.add_fap_lines_to_periodogram(frames[1][0], sigmas, faps, **pargs1)
-
+        # kwargs = dict(color='c', xlabel=None, ylabel=None, xlim=None, ylim=None,
+        #               zorder=2)
+        # frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0 / lsfreq, ms_power,
+        #                                     **kwargs)
 
     # -------------------------------------------------------------------------
     # plot phased periodogram
@@ -443,12 +486,73 @@ def plot_graph(inputs, results, params):
         args = [frames[1][1], phase, data, edata, phasefit, powerfit,
                 params['OFFSET']]
         kwargs = dict(title='Phase Curve, period={0:.3f} days'.format(period[0]),
-                      ylabel='Magnitude')
+                      ylabel='$\Delta$ TAM Magnitude')
         frames[1][1] = pf2.plot_phased_curve(*args, **kwargs)
         frames[1][1].set_ylim(*frames[1][1].get_ylim()[::-1])
     # -------------------------------------------------------------------------
     # save show close
     plt.subplots_adjust(hspace=0.3)
+    plt.show()
+    plt.close()
+
+
+def plot_freq_grid_power(xx, freq, dd):
+    plt.close()
+    dd= np.array(dd)
+    # left right bottom top
+    extent = [np.min(1/freq), np.max(1/freq), 0, len(xx)]
+
+    im = plt.imshow(xx[::-1], extent=extent, aspect='auto', vmin=0,
+                    vmax=np.max(xx), cmap='plasma')
+    plt.scatter(1/dd, range(len(dd)), marker='x', color='g', s=2)
+    plt.xlabel('Frequency / days$^{-1}$')
+    plt.xlabel('Time / days')
+    plt.xscale('log')
+    plt.ylabel('Monte carlo iteration')
+    plt.grid(False)
+    cb = plt.colorbar(im)
+    cb.set_label('Power')
+    plt.show()
+    plt.close()
+
+
+def comparison_test(inp, res):
+    results = res
+    time, data, edata = inp
+
+    ff, xx, _ = pf2.lombscargle(time, data, edata, fit_mean=True,
+                                freq=freq, norm = 'standard')
+
+    plt.plot(1 / ff, xx, color='k', label='True LS')
+    plt.plot(1 / ff, x_arr[0], color='r', label='MC LS')
+    plt.legend(loc=0)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel('Time / days')
+    plt.ylabel('Power $P_N$')
+    plt.title('Lomb-Scargle True vs MCMC test')
+    frame = plt.gca()
+    # -------------------------------------------------------------------------
+    # Plot FAP lines
+    pargs1 = dict(color='b', linestyle='--')
+    if 'theoryFAPpower' in results:
+        tfap_power = res['theoryFAPpower']
+        sigmas = list(tfap_power.keys())
+        faps = list(tfap_power.values())
+        pf2.add_fap_lines_to_periodogram(frame, sigmas, faps, **pargs1)
+    pargs1 = dict(color='g', linestyle='--')
+    if 'bsFAPpower' in results:
+        bfap_power = res['bsFAPpower']
+        sigmas = list(bfap_power.keys())
+        faps = list(bfap_power.values())
+        pf2.add_fap_lines_to_periodogram(frame, sigmas, faps, **pargs1)
+    pargs1 = dict(color='c', linestyle='--')
+    if 'mcFAPpower' in results:
+        mfap_power = res['mcFAPpower']
+        sigmas = list(mfap_power.keys())
+        faps = list(mfap_power.values())
+        pf2.add_fap_lines_to_periodogram(frame, sigmas, faps, **pargs1)
+
     plt.show()
     plt.close()
 
@@ -531,22 +635,101 @@ def lombscargle_bootstrap(time, data, edata, frequency_grid, n_bootstraps=100,
     f_arr, d_arr, x_arr = [], [], []
     for _ in wrap(range(n_bootstraps)):
         f, x = bootstrapped_power()
-        argmax = np.argmax(x)
         x_arr.append(x)
-        f_arr.append(f[argmax]), d_arr.append(x[argmax])
     # sort
-    sort = np.argsort(f_arr)
     x_arr = np.array(x_arr)
-    f_arr, d_arr = np.array(f_arr)[sort], np.array(d_arr)[sort]
+    argmax = np.argmax(x_arr, axis=1)
+    f_arr, d_arr = frequency_grid[argmax], x_arr.flat[argmax]
     # return
     if full:
         median = np.percentile(x_arr, 50, axis=0)
-        return frequency_grid, median, f_arr, d_arr
+        return frequency_grid, x_arr, f_arr, d_arr
     else:
         return d_arr
 
 
-def power_from_prob_mcmc(inputs, res, faps=None, percentiles=None):
+def get_gaussian_data(means, stds, samples, rng=None):
+    if rng is None:
+        rng = np.random.RandomState(None)
+    # get n_samples number of gaussians for each time element
+    g = []
+    for i in range(len(means)):
+        g.append(rng.normal(means[i], stds[i], size=samples))
+    # transpose so we have 1000 light curves with len(time) length
+    return np.array(g).T
+
+
+def lombscargle_mcmc(time, data, edata, frequency_grid, n_bootstraps=100,
+                     random_seed=None, full=False, norm='standard',
+                     fit_mean=True, log=False):
+    """
+    Perform a bootstrap analysis that resamples the data/edata keeping the
+    temporal (time vector) co-ordinates constant
+
+    modified from:
+    https://github.com/jakevdp/PracticalLombScargle/blob/master
+          /figures/Uncertainty.ipynb
+
+    :param time: numpy array, the time vector
+
+    :param data: numpy array, the data vector
+
+    :param edata: numpy array, the uncertainty vector associated with the data
+                  vector
+
+    :param frequency_grid: numpy array, the frequency grid to use on each
+                           iteration
+
+    :param n_bootstraps: int, number of bootstraps to perform
+
+    :param random_seed: int, random seem to use
+
+    :param full: boolean, if True return freq at maximum power and maximum
+                 powers, else return powers
+
+    :param norm: Lomb-Scargle normalisation
+                          (see astropy.stats.LombScargle)
+
+    :param fit_mean: boolean, if True uses a floating mean periodogram
+                          (generalised Lomb-Scargle periodogram) else uses
+                          standard Lomb-Scargle periodogram
+
+    :param log: boolean, if true displays progress to standard output (console)
+
+    :return:
+    """
+    rng = np.random.RandomState(random_seed)
+
+    kwargs = dict(fit_mean=fit_mean, freq=frequency_grid, norm=norm)
+    # generate gaussian arrays
+    # Want to sample the white noise i.e. take each data point from a
+    # gaussian distribution with mean = 0, std = edata
+    zerodata = np.zeros_like(data)
+    g = get_gaussian_data(zerodata, abs(edata), n_bootstraps, rng)
+    def bootstrapped_power(it):
+        # define the Lomb Scargle with resampled data and using frequency_grid
+        ff, xx, _ = pf2.lombscargle(time, g[it], edata, **kwargs)
+        # return frequency at maximum and maximum
+        return ff, xx
+
+    # run bootstrap
+    f_arr, d_arr, x_arr = [], [], []
+    for it in wrap(range(n_bootstraps)):
+        f, x = bootstrapped_power(it)
+        x_arr.append(x)
+    # sort
+    x_arr = np.array(x_arr)
+    argmax = np.argmax(x_arr, axis=1)
+    f_arr, d_arr = frequency_grid[argmax], x_arr.flat[argmax]
+    # return
+    if full:
+        median = np.percentile(x_arr, 50, axis=0)
+        return frequency_grid, x_arr, f_arr, d_arr
+    else:
+        return d_arr
+
+
+def power_from_prob_bootstrap(inputs, res, faps=None, percentiles=None):
     time, data, edata = inputs
     freq = res['lsfreq']
     if faps is None and percentiles is None:
@@ -554,13 +737,59 @@ def power_from_prob_mcmc(inputs, res, faps=None, percentiles=None):
     if faps is None:
         faps = 1 - np.array(percentiles)/100.0
 
-    lres = lombscargle_bootstrap(time, data, edata, freq, n_bootstraps=1000,
-                                 full=False, norm='standard', fit_mean=True,
+    res1 = lombscargle_bootstrap(time, data, edata, freq, n_bootstraps=N_BS,
+                                 full=True, norm='standard', fit_mean=True,
                                  log=True)
+    freq, x_arr, f_arr, lres = res1
+    # plot_freq_grid_power(x_arr, freq, f_arr)
+    return np.percentile(lres, 100 * (1 - faps)), np.max(x_arr, axis=0)
+    # return np.percentile(lres, 100*(1 - faps)), np.median(x_arr, axis=0)
 
-    return np.percentile(lres, 100*(1 - faps))
+
+def power_from_prob_mcmc(inputs, results, faps=None, percentiles=None):
+    time, data, edata = inputs
+    freq = results['lsfreq']
+    if faps is None and percentiles is None:
+        raise ValueError("Need to define either faps or percentiles")
+    if faps is None:
+        faps = 1 - np.array(percentiles)/100.0
+
+    res1 = lombscargle_mcmc(time, data, edata, freq, n_bootstraps=N_BS,
+                            full=True, norm='standard', fit_mean=True,
+                            log=True)
+    freq, x_arr, f_arr, lres = res1
+    # plot_freq_grid_power(x_arr, freq, f_arr)
+    return np.percentile(lres, 100 * (1 - faps)), np.max(x_arr, axis=0)
+    # return np.percentile(lres, 100*(1 - faps)), np.median(x_arr, axis=0)
 
 
+def test_data(show=True):
+    period = TEST_PERIOD
+    tmax = TEST_TMAX
+    npoints = TEST_N
+    noise = TEST_NOISE
+
+    rng = np.random.RandomState(9)
+
+    time = rng.random_sample(npoints*1000)*tmax
+    omega = 2 * np.pi * (1.0 / period)
+    a, b, c = TEST_AMP, TEST_AMP, 0.0
+    data = a*np.cos(omega*time) + b*np.sin(omega*time) + c
+    # add noise
+    edata = rng.normal(0, noise, size=len(time))
+    data += edata
+    edata = abs(edata)
+
+    resample = rng.randint(0, len(time), npoints)
+    time, data, edata = time[resample], data[resample], edata[resample]
+
+    if show:
+        plt.close()
+        plt.scatter(time, data)
+        plt.show()
+        plt.close()
+
+    return time, data, edata
 
 
 # =============================================================================
@@ -592,21 +821,32 @@ if __name__ == "__main__":
     percentiles = np.array(pf2.sigma2percentile(sigmas) * 100)
     # get false alarm probability power FROM THEORY
     theory_fap_power = power_from_prob_theory(inp, percentiles=percentiles)
+    # get false alarm probability power FROM BOOTSTRAP
+    print('\n\t Bootstrap FAP (randomising magnitudes)')
+    bs_fap_power, bs_power = power_from_prob_bootstrap(inp, res,
+                                                      percentiles=percentiles)
     # get false alarm probability power FROM MONTE CARLO
-    mc_fap_power = power_from_prob_mcmc(inp, res, percentiles=percentiles)
+    print('\n\t MCMC FAP (Gaussian dist: mean=1 std=uncertainties)')
+    mc_fap_power, ms_power = power_from_prob_mcmc(inp, res,
+                                                  percentiles=percentiles)
+    res['bs_power'] = bs_power
+    res['ms_power'] = ms_power
     # loop around sigmas
     res['theoryFAPpower'] = dict()
+    res['bsFAPpower'] = dict()
     res['mcFAPpower'] = dict()
     print('\nNumber of elements in time vector: {0}'.format(len(inp[0])))
     print('\nNumber of elements in freq grid: {0}'.format(len(res['lsfreq'])))
     for s, sigma in enumerate(sigmas):
         # print statements to compare values
         print('Sigma = {0} Percentile = {1:4f}'.format(sigma, percentiles[s]))
-        print('FAP theory power = {0:4f}'.format(theory_fap_power[s]))
-        print('FAP monte carlo power = {0:4f}'.format(mc_fap_power[s]))
+        print('BLUE: FAP theory power = {0:4f}'.format(theory_fap_power[s]))
+        print('GREEN: FAP bootstrap power = {0:4f}'.format(bs_fap_power[s]))
+        print('CYAN: FAP monte carlo power = {0:4f}'.format(mc_fap_power[s]))
         print('\n')
         # save results to results dict
         res['theoryFAPpower'][sigma] = theory_fap_power[s]
+        res['bsFAPpower'][sigma] = bs_fap_power[s]
         res['mcFAPpower'][sigma] = mc_fap_power[s]
 
     # -------------------------------------------------------------------------

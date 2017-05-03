@@ -74,6 +74,8 @@ def lombscargle(time, data, edata=None, fit_mean=True, fmin=100, fmax=1.0,
 
     :return:
     """
+    norm = "standard"
+    method = "fast"
     # Set up an instance of the LombScargle class
     ls = LombScargle(time, data, edata, fit_mean=fit_mean)
     if freq is None:
@@ -81,9 +83,20 @@ def lombscargle(time, data, edata=None, fit_mean=True, fmin=100, fmax=1.0,
         freq, power = ls.autopower(minimum_frequency=fmin,
                                    maximum_frequency=fmax,
                                    samples_per_peak=samples_per_peak,
-                                   normalization=norm)
+                                   normalization=norm, method=method)
     else:
-        power = ls.power(freq, normalization=norm)
+        power = ls.power(freq, normalization=norm, method=method)
+
+    # un-normalise
+    # if norm == "psd":
+    #     power = power / (0.5 * time.size)
+    # elif norm == "standard":
+    #     y, dy = data, edata
+    #     w = dy ** -2.0
+    #     w /= w.sum()
+    #     y = y - np.dot(w, y)
+    #     YY = np.dot(w, y ** 2)
+    #     power *= YY
 
     # # undo normalisation
     # w = 1 / edata ** 2
@@ -464,9 +477,9 @@ def ifalse_alarm_probability(faplevel, num, ofac, hifac):
     return iprobability(prob, num)
 
 
-def ls_montecarlo(time, data, edata, frequency_grid, n_iterations=100,
-                  random_seed=None, norm='standard', fit_mean=True, log=False,
-                  randomize='times'):
+def ls_noiseperiodogram(time, data, edata, frequency_grid, n_iterations=100,
+                        random_seed=None, norm='standard', fit_mean=True,
+                        log=False, randomize='times'):
     rng = np.random.RandomState(random_seed)
 
     if log:
@@ -935,7 +948,13 @@ def add_fap_lines_to_periodogram(frame, sigmas, faps, **kwargs):
     zorder = kwargs.get('zorder', 2)
     # plot faps
     for f, fap in enumerate(faps):
+        xmin, xmax, ymin, ymax = frame.axis()
         frame.axhline(fap, color=color, linestyle=linestyle, zorder=zorder)
+        if fap < ymin:
+            frame.set_ylim(0.9*fap, ymax)
+        if fap > ymax:
+            frame.set_ylim(ymin, 1.1*fap)
+    # then add a second axis
     xmin, xmax, ymin, ymax = frame.axis()
     frame1 = frame.twinx()
     frame1.set(xlim=(xmin, xmax), ylim=(ymin, ymax))

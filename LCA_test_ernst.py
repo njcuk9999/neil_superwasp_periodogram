@@ -126,8 +126,7 @@ TEST_TMAX = 800
 # number of observations across TMAX to select
 TEST_N = 100
 # edata uncertainty (amplitude of signal is set to 1)
-TEST_AMP = 1.0
-TEST_NOISE = 0.1
+TEST_SNR = 2
 
 
 # =============================================================================
@@ -767,22 +766,11 @@ def test_data(show=True):
     period = TEST_PERIOD
     tmax = TEST_TMAX
     npoints = TEST_N
-    noise = TEST_NOISE
+    noise = TEST_SNR
 
-    rng = np.random.RandomState(9)
-
-    time = rng.random_sample(npoints*1000)*tmax
-    omega = 2 * np.pi * (1.0 / period)
-    a, b, c = TEST_AMP, TEST_AMP, 0.0
-    data = a*np.cos(omega*time) + b*np.sin(omega*time) + c
-    # add noise
-    edata = rng.normal(0, noise, size=len(time))
-    data += edata
-    edata = abs(edata)
-
-    resample = rng.randint(0, len(time), npoints)
-    time, data, edata = time[resample], data[resample], edata[resample]
-
+    time, data, edata = pf2.create_data(npoints, timeamp=tmax,
+                                        signal_to_noise=noise, period=period,
+                                        random_state=9)
     if show:
         plt.close()
         plt.scatter(time, data)

@@ -108,6 +108,9 @@ def lombscargle(time, data, edata=None, fit_mean=True, fmin=100, fmax=1.0,
     # # normalise by inverse variance
     # power = power / np.std(data)**2
 
+    # normalise power by the sum of all powers
+    power = power/np.sum(power)
+
     # Return the auto generated frequencies and the normalised power
     # and the lombscargle instance
     return freq, power, ls
@@ -950,17 +953,22 @@ def add_fap_lines_to_periodogram(frame, sigmas, faps, **kwargs):
     for f, fap in enumerate(faps):
         xmin, xmax, ymin, ymax = frame.axis()
         frame.axhline(fap, color=color, linestyle=linestyle, zorder=zorder)
-        if fap < ymin:
-            frame.set_ylim(0.9*fap, ymax)
-        if fap > ymax:
-            frame.set_ylim(ymin, 1.1*fap)
+        # if fap < ymin:
+        #     frame.set_ylim(0.9*fap, ymax)
+        # if fap > ymax:
+        #     frame.set_ylim(ymin, 1.1*fap)
     # then add a second axis
     xmin, xmax, ymin, ymax = frame.axis()
-    frame1 = frame.twinx()
-    frame1.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
-    frame1.set_yticks(faps)
-    frame1.set_yticklabels([str(i) + '$\sigma$' for i in sigmas])
-    frame1.tick_params(axis='y', colors=color)
+
+    for i, sigma in enumerate(sigmas):
+        text = str(sigma) + '$\sigma$'
+        frame.text(xmax*1.05, faps[i], text, color=color)
+
+    # frame1 = frame.twinx()
+    # frame1.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+    # frame1.set_yticks(faps)
+    # frame1.set_yticklabels([str(i) + '$\sigma$' for i in sigmas])
+    # frame1.tick_params(axis='y', colors=color)
     # return frame
     return frame
 

@@ -18,10 +18,7 @@ import sys
 import os
 import mpmath
 from tqdm import tqdm as wrap
-try:
-    import periodogram_functions2 as pf2
-except ImportError:
-    raise Exception("Program requires 'periodogram_functions.py'")
+import periodogram_functions2 as pf2
 
 
 # =============================================================================
@@ -31,6 +28,7 @@ except ImportError:
 TYPE = "Normal"
 # TYPE = "DATABASE"
 # TYPE = "Elodie"
+TEST = False
 # -----------------------------------------------------------------------------
 # Deal with choosing a target and data paths
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP/"
@@ -51,8 +49,8 @@ if TYPE == "Elodie":
 elif TYPE == "DATABASE":
     SID = "ABD_108A"
     TIMECOL = 'HJD'
-    DATACOL = 'MAG2'
-    EDATACOL = 'MAG2_ERR'
+    DATACOL = 'TAMMAG2'
+    EDATACOL = 'TAMMAG2_ERR'
 else:
     # set file paths
     DPATH = WORKSPACE + 'Data/test_for_ernst/'
@@ -119,14 +117,14 @@ LIMIT_RANGE = False
 RANGE_LOW = 3700
 RANGE_HIGH = 4000
 # -----------------------------------------------------------------------------
-TEST = True
-TEST_PERIOD = 3.2
+
+TEST_PERIOD = 8.1732
 # number of days to observe
 TEST_TMAX = 800
 # number of observations across TMAX to select
 TEST_N = 100
 # edata uncertainty (amplitude of signal is set to 1)
-TEST_SNR = 2
+TEST_SNR = 0.5
 
 
 # =============================================================================
@@ -419,15 +417,16 @@ def plot_graph(inputs, results, params):
     # plot periodogram
     if 'lsfreq' in results and 'lspower' in results:
         lsfreq, lspower = results['lsfreq'], results['lspower']
+        symbol = r'$P_N / \sum(P_N)$'
         kwargs = dict(title='Lomb-Scargle Periodogram',
-                      ylabel='Lomb-Scargle Power $P_N$',
+                      ylabel='Lomb-Scargle Power ' + symbol,
                       xlabel='Time / days',
                       zorder=1)
         frames[1][0] = pf2.plot_periodogram(frames[1][0], 1.0/lsfreq, lspower,
                                             **kwargs)
     # -------------------------------------------------------------------------
     # add arrow to periodogram
-    if 'lsfreq' in results and 'lspower' in results and 'period' in results:
+    if 'lsfreq' in results and 'lspower' in results and 'periods' in results:
         lsfreq, lspower = results['lsfreq'], results['lspower']
         period =  results['periods']
         kwargs = dict(firstcolor='r', normalcolor='b', zorder=4)
@@ -451,7 +450,7 @@ def plot_graph(inputs, results, params):
         tfap_power = results['theoryFAPpower']
         sigmas = list(tfap_power.keys())
         faps = list(tfap_power.values())
-        pf2.add_fap_lines_to_periodogram(frames[1][0], sigmas, faps, **pargs1)
+        # pf2.add_fap_lines_to_periodogram(frames[1][0], sigmas, faps, **pargs1)
 
     pargs1 = dict(color='g', linestyle='--')
     if 'bsFAPpower' in results:
@@ -515,6 +514,7 @@ def plot_freq_grid_power(xx, freq, dd):
     plt.close()
 
 
+"""
 def comparison_test(inp, res):
     results = res
     time, data, edata = inp
@@ -554,7 +554,7 @@ def comparison_test(inp, res):
 
     plt.show()
     plt.close()
-
+"""
 
 # =============================================================================
 # Define FAP functions

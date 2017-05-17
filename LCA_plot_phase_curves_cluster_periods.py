@@ -29,8 +29,8 @@ except ImportError:
 # Define variables
 # =============================================================================
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP"
-DPATH = WORKSPACE + "/Data/ls_analysis_run/LCA_cluster_periods_0.05.fits"
-DPATH = WORKSPACE + "/Data/ls_analysis_run/LCA_cluster_periods_0.05_post_visual_all.fits"
+DPATH = WORKSPACE + "/Data/ls_analysis_run_2/LCA_cluster_periods_0.05.fits"
+DPATH = WORKSPACE + "/Data/ls_analysis_run_2/LCA_cluster_periods_0.05_post_visual_all.fits"
 # column definitions
 NAMECOL = "group_name"
 MASKCOL = "has_period_1_05_to_50"
@@ -42,9 +42,9 @@ DATACOL = 'MAG2'
 EDATACOL = 'MAG2_ERR'
 
 # record results
-RECORD = False
+RECORD = True
 # do a single object
-SINGLE_OBJECT = True
+SINGLE_OBJECT = False
 SID = 'BPC_46A'
 # -----------------------------------------------------------------------------
 # Phase offset
@@ -113,7 +113,10 @@ if __name__ == "__main__":
     data = fits.getdata(DPATH, ext=1)
     # ----------------------------------------------------------------------
     # mask
-    mask = ~np.array(data[MASKCOL])
+    if MASKCOL in data.column.names:
+        mask = ~np.array(data[MASKCOL])
+    else:
+        mask = np.zeros(len(data), dtype=bool)
     # get the names
     names = np.array(data[NAMECOL])
     # get the periods

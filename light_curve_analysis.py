@@ -62,8 +62,8 @@ elif TYPE == "Test":
 elif TYPE == "Database":
     FROM_DATABASE = True
     TIMECOL = 'HJD'
-    DATACOL = 'MAG2'
-    EDATACOL = 'MAG2_ERR'
+    DATACOL = 'TAMMAG2'
+    EDATACOL = 'TAMMAG2_ERR'
 else:
     # set file paths
     DPATH = WORKSPACE + 'Data/from_exoplanetarchive/'

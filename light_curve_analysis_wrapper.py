@@ -28,9 +28,9 @@ except ModuleNotFoundError:
 # Deal with choosing a target and data paths
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP/"
 # location of folder to plot files to
-PLOTPATH = WORKSPACE + '/Plots/ls_analysis_run/'
+PLOTPATH = WORKSPACE + '/Plots/ls_analysis_run_2/'
 # file to save periods to
-PERIODPATH = WORKSPACE + '/Data/ls_analysis_run/'
+PERIODPATH = WORKSPACE + '/Data/ls_analysis_run_2/'
 PERIODPATH += 'light_curve_analysis_periods_regions.fits'
 # if True and periodpath file exists we will skip entries that exist
 SKIP_DONE = True
@@ -68,7 +68,7 @@ SPP = 5
 # random seed for bootstrapping
 RANDOM_SEED = 9999
 # number of bootstraps to perform
-N_BS = 100
+N_BS = 500
 # Phase offset
 OFFSET = (-0.5, 0.5)
 # define the FAP percentiles

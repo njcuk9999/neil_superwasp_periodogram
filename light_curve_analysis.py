@@ -345,8 +345,8 @@ def calculation(inputs, params, mask=None):
     kwargs = dict(n_iterations=params['N_BS'],
                   random_seed=params['RANDOM_SEED'], norm='standard',
                   fit_mean=True, log=params['LOG'])
-    msfreq, mspower, _, _ = pf2.ls_montecarlo(time, data, edata, lsfreq,
-                                              **kwargs)
+    msfreq, mspower, _, _ = pf2.ls_noiseperiodogram(time, data, edata, lsfreq,
+                                                    **kwargs)
     mspower = pf2.normalise(mspower, NORMALISATION)
     results['msfreq'] = msfreq
     results['mspower'] = mspower
@@ -578,7 +578,6 @@ if __name__ == "__main__":
         # ---------------------------------------------------------------------
         # save periods to file
         save_to_fit(res, pp)
-        input('Enter to continue. Control+C to cancel')
 
 
 # =============================================================================

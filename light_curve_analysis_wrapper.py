@@ -68,7 +68,7 @@ SPP = 5
 # random seed for bootstrapping
 RANDOM_SEED = 9999
 # number of bootstraps to perform
-N_BS = 500
+N_BS = 100
 # Phase offset
 OFFSET = (-0.5, 0.5)
 # define the FAP percentiles

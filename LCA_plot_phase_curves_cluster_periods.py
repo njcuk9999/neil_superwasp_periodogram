@@ -5,7 +5,9 @@ Created on 19/04/17 at 2:04 PM
 
 @author: neil
 
-Program description here
+Takes the results of 'locate  probable peaks' and allows visual inspection
+of the top 3 phase folds (i.e. asks the user - "Did we find a period that looks
+correct?"
 
 Version 0.0.0
 """

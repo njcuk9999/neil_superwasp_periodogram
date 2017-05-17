@@ -5,9 +5,15 @@ Created on 12/04/17 at 11:17 AM
 
 @author: neil
 
-Program description here
+Locate probably peaks via cluster groups
 
-Version 0.0.0
+This code takes the output of light_curve_analysis and tries to locate the
+most probable peak based on using a cluster algorithm to locate similar peaks
+(within THRESHOLD percent of each other). It then adds up all the power in a 
+cluster group and ranks groups by total power. Returned is a fits file with the
+TOP_N peaks (sorted by total cluster group power from largest to smallest)
+
+Version 0.0.1
 """
 
 import numpy as np
@@ -22,7 +28,7 @@ import itertools
 # Define variables
 # =============================================================================
 WORKSPACE = '/Astro/Projects/RayPaul_Work/SuperWASP/'
-DPATH = WORKSPACE + 'Data/ls_analysis_run/'
+DPATH = WORKSPACE + 'Data/ls_analysis_run_2/'
 DFILE1 = DPATH + '/light_curve_analysis_periods_regions.fits'
 DFILE2 = DPATH + '/light_curve_analysis_periods_regions_groups_5.fits'
 
@@ -57,6 +63,7 @@ def get_subtype(names):
         else:
             sub[n_it] = True
     return full, sub
+
 
 def group_objects(names, uids):
 

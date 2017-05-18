@@ -287,8 +287,8 @@ def clean_data(time, data, edata, params):
             raise ValueError("Error: not points with uncertainty/value"
                              " < {0}".format(uclip))
         else:
-            uargs = [len(mask) - np.sum(mask)]
-            print('\n\t Uncertainty clip removed {0} points'.format(*uargs))
+            uargs = [len(mask) - np.sum(mask), len(mask)]
+            print('\n\t Uncertainty clip removed {0}/{1} points'.format(*uargs))
     if sclip is not None:
         mask = data < (np.median(data) + (sclip * np.std(data)))
         mask &= data > (np.median(data) - (sclip * np.std(data)))
@@ -297,8 +297,8 @@ def clean_data(time, data, edata, params):
             raise ValueError("Error: not points with sigma"
                              " < {0}".format(sclip))
         else:
-            sargs = [len(mask) - np.sum(mask)]
-            print('\n\t Sigma clip removed {0} points'.format(*sargs))
+            sargs = [len(mask) - np.sum(mask), len(mask)]
+            print('\n\t Sigma clip removed {0}/{1} points'.format(*sargs))
 
 
     # print('Length of data: {0}'.format(len(time)))

@@ -31,8 +31,10 @@ except ImportError:
 # Define variables
 # =============================================================================
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP"
-DPATH = WORKSPACE + "/Data/ls_analysis_run_2/LCA_cluster_periods_0.05.fits"
-DPATH = WORKSPACE + "/Data/ls_analysis_run_2/LCA_cluster_periods_0.05_post_visual_all.fits"
+DPATH = WORKSPACE + ("/Data/ls_analysis_run_3/light_curve_analysis_periods_"
+                     "regions_groups_5.fits")
+DPATH1 = WORKSPACE + ("/Data/ls_analysis_run_3/light_curve_analysis_periods_"
+                     "regions_groups_5_post_visual.fits")
 # column definitions
 NAMECOL = "group_name"
 MASKCOL = "has_period_1_05_to_50"
@@ -40,17 +42,17 @@ SELECTIONCOL = "visual_rank"
 FLAGCOL = "passes_visual_check"
 PERIODCOLS = ['Period_A', 'Period_B', 'Period_C']
 # database columns
-DATACOL = 'MAG2'
-EDATACOL = 'MAG2_ERR'
+DATACOL = 'TAMMAG2'
+EDATACOL = 'TAMMAG2_ERR'
 
 # record results
-RECORD = True
+RECORD = False
 # do a single object
-SINGLE_OBJECT = False
+SINGLE_OBJECT = True
 SID = 'BPC_46A'
 # -----------------------------------------------------------------------------
 # Phase offset
-OFFSET = (-0.5, 0.5)
+OFFSET = (-0.1, 0.1)
 
 # --------------------------------------------------------------------------
 # set database settings
@@ -60,6 +62,9 @@ PASSWORD = '1234'
 DATABASE = 'swasp'
 TABLE = 'swasp_sep16_tab'
 TIMECOL = 'HJD'
+# -----------------------------------------------------------------------------
+# Data cleaning
+UNCERTAINTY_CLIP = 0.005
 
 
 # =============================================================================
@@ -99,7 +104,7 @@ def plot_phase_curve(frame, inputs, results):
     powerfit = results['powerfit']
     args = [frame, phase, data, edata, phasefit, powerfit, OFFSET]
     kwargs = dict(title='Phase Curve, period={0:.3f} days'.format(period),
-                  ylabel='Magnitude', plotsigma=3.0)
+                  ylabel='Magnitude', plotsigma=None)
     frame = pf2.plot_phased_curve(*args, **kwargs)
     frame.set_ylim(*frame.get_ylim()[::-1])
     return frame
@@ -115,10 +120,10 @@ if __name__ == "__main__":
     data = fits.getdata(DPATH, ext=1)
     # ----------------------------------------------------------------------
     # mask
-    if MASKCOL in data.column.names:
+    if MASKCOL in data.columns.names:
         mask = ~np.array(data[MASKCOL])
     else:
-        mask = np.zeros(len(data), dtype=bool)
+        mask = np.ones(len(data), dtype=bool)
     # get the names
     names = np.array(data[NAMECOL])
     # get the periods
@@ -129,7 +134,8 @@ if __name__ == "__main__":
     # set up parameter dictionary
     pp = dict(FROM_DATABASE=True, HOSTNAME=HOSTNAME, DATABASE=DATABASE,
               TABLE=TABLE, USERNAME=USERNAME, PASSWORD=PASSWORD,
-              TIMECOL=TIMECOL,  DATACOL=DATACOL, EDATACOL=EDATACOL)
+              TIMECOL=TIMECOL,  DATACOL=DATACOL, EDATACOL=EDATACOL,
+              UNCERTAINTY_CLIP=UNCERTAINTY_CLIP)
     # ----------------------------------------------------------------------
     # set up options and add buttons
     odict = dict(close=True)
@@ -149,12 +155,14 @@ if __name__ == "__main__":
                 continue
         # get SID/name
         pp['SID'] = names[row]
-        print('{0}\n Analsising {1} \n{0}'.format('='*50, pp['SID']))
+        pargs = ['='*50, pp['SID'], row+1, len(names)]
+        print('{0}\n Analsising {1} \t {2} of {3} \n{0}'.format(*pargs))
         # get data
         time_arr, data_arr, edata_arr, pp = lca.load_data(pp)
         # set up figure
         plt.close()
         fig, frames = plt.subplots(nrows=1, ncols=len(periods))
+        fig.set_size_inches(16, 10)
         # loop round each period
         for p_it, period in enumerate(periods):
             # set up inputs
@@ -178,11 +186,19 @@ if __name__ == "__main__":
             selected_option = options[a.result]
             uinputs.append(selected_option)
     if RECORD:
+        # print
+        print('\n Saving to file...')
         # load up table
         table = Table.read(DPATH)
-        table[SELECTIONCOL][mask] = uinputs
+        if SELECTIONCOL in table.colnames:
+            table[SELECTIONCOL][mask] = uinputs
+        elif len(uinputs) == len(table):
+            table[SELECTIONCOL] = uinputs
+        else:
+            raise ValueError("number of user inputs is not equal to number"
+                             "of rows in table")
         table[FLAGCOL] = np.array(table[SELECTIONCOL] == 1.0, dtype=bool)
-        table.write(DPATH, format='fits', overwrite=True)
+        table.write(DPATH1, format='fits', overwrite=True)
 
 # =============================================================================
 # End of code

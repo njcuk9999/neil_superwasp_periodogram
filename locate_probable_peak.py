@@ -28,7 +28,7 @@ import itertools
 # Define variables
 # =============================================================================
 WORKSPACE = '/Astro/Projects/RayPaul_Work/SuperWASP/'
-DPATH = WORKSPACE + 'Data/ls_analysis_run_2/'
+DPATH = WORKSPACE + 'Data/ls_analysis_run_3/'
 DFILE1 = DPATH + '/light_curve_analysis_periods_regions.fits'
 DFILE2 = DPATH + '/light_curve_analysis_periods_regions_groups_5.fits'
 

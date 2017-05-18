@@ -65,6 +65,7 @@ TIMECOL = 'HJD'
 # -----------------------------------------------------------------------------
 # Data cleaning
 UNCERTAINTY_CLIP = 0.005
+SIGMA_CLIP = 3.0
 
 
 # =============================================================================
@@ -134,8 +135,8 @@ if __name__ == "__main__":
     # set up parameter dictionary
     pp = dict(FROM_DATABASE=True, HOSTNAME=HOSTNAME, DATABASE=DATABASE,
               TABLE=TABLE, USERNAME=USERNAME, PASSWORD=PASSWORD,
-              TIMECOL=TIMECOL,  DATACOL=DATACOL, EDATACOL=EDATACOL,
-              UNCERTAINTY_CLIP=UNCERTAINTY_CLIP)
+              TIMECOL=TIMECOL, DATACOL=DATACOL, EDATACOL=EDATACOL,
+              UNCERTAINTY_CLIP=UNCERTAINTY_CLIP, SIGMA_CLIP=SIGMA_CLIP)
     # ----------------------------------------------------------------------
     # set up options and add buttons
     odict = dict(close=True)

@@ -139,7 +139,7 @@ NORMALISATION = None
 # -----------------------------------------------------------------------------
 # Data cleaning
 UNCERTAINTY_CLIP = 0.005
-
+SIGMA_CLIP = 3.0
 
 # =============================================================================
 # Define functions
@@ -275,14 +275,31 @@ def load_data(params):
 
 def clean_data(time, data, edata, params):
 
+
+    uclip = params.get('UNCERTAINTY_CLIP', None)
+    sclip = params.get('SIGMA_CLIP', None)
     # print('Length of data: {0}'.format(len(time)))
 
-    if params['UNCERTAINTY_CLIP'] is not None:
-        mask = (edata/data) <= params['UNCERTAINTY_CLIP']
+    if uclip is not None:
+        mask = (edata/data) <= uclip
         time, data, edata = time[mask], data[mask], edata[mask]
         if np.sum(mask) == 0:
             raise ValueError("Error: not points with uncertainty/value"
-                             " < {0}".format(params['UNCERTAINTY_CLIP']))
+                             " < {0}".format(uclip))
+        else:
+            uargs = [len(mask) - np.sum(mask)]
+            print('\n\t Uncertainty clip removed {0} points'.format(*uargs))
+    if sclip is not None:
+        mask = data < (np.median(data) + (sclip * np.std(data)))
+        mask &= data > (np.median(data) - (sclip * np.std(data)))
+        time, data, edata = time[mask], data[mask], edata[mask]
+        if np.sum(mask) == 0:
+            raise ValueError("Error: not points with sigma"
+                             " < {0}".format(sclip))
+        else:
+            sargs = [len(mask) - np.sum(mask)]
+            print('\n\t Sigma clip removed {0} points'.format(*sargs))
+
 
     # print('Length of data: {0}'.format(len(time)))
     # input('Ctrl+C to cancel, Enter to continue')
@@ -506,7 +523,7 @@ def plot_graph(inputs, results, params):
     args = [frames[1][1], phase, data, edata, phasefit, powerfit,
             params['OFFSET']]
     kwargs = dict(title='Phase Curve, period={0:.3f} days'.format(period[0]),
-                  ylabel='Magnitude', plotsigma=5.0)
+                  ylabel='Magnitude', plotsigma=None)
     frames[1][1] = pf2.plot_phased_curve(*args, **kwargs)
     frames[1][1].set_ylim(*frames[1][1].get_ylim()[::-1])
     # -------------------------------------------------------------------------

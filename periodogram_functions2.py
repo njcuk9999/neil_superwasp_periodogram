@@ -908,7 +908,7 @@ def plot_phased_curve(frame, phase, data, edata, phase_fit, power_fit, offset,
     xlim = kwargs.get('xlim', (offset[0], offset[1] + 1))
     ylim = kwargs.get('ylim', None)
     title = kwargs.get('title', None)
-    plotsigma = kwargs.get('plotsigma', PLOTSIGMA)
+    plotsigma = kwargs.get('plotsigma', None)
     # Plot the data with an offset (i.e between -1 and 2)
     for oset in (-1, 0, 1):
         if oset != 0:
@@ -937,7 +937,8 @@ def plot_phased_curve(frame, phase, data, edata, phase_fit, power_fit, offset,
         frame.set_ylim(*ylim)
     else:
         median, std = np.median(data), np.std(data)
-        frame.set_ylim(median - plotsigma * std, median + plotsigma * std)
+        if plotsigma is not None:
+            frame.set_ylim(median - plotsigma * std, median + plotsigma * std)
     if title is not None:
         frame.set_title(title)
     # return

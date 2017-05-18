@@ -28,9 +28,9 @@ except ModuleNotFoundError:
 # Deal with choosing a target and data paths
 WORKSPACE = "/Astro/Projects/RayPaul_Work/SuperWASP/"
 # location of folder to plot files to
-PLOTPATH = WORKSPACE + '/Plots/ls_analysis_run_2/'
+PLOTPATH = WORKSPACE + '/Plots/ls_analysis_run_3/'
 # file to save periods to
-PERIODPATH = WORKSPACE + '/Data/ls_analysis_run_2/'
+PERIODPATH = WORKSPACE + '/Data/ls_analysis_run_3/'
 PERIODPATH += 'light_curve_analysis_periods_regions.fits'
 # if True and periodpath file exists we will skip entries that exist
 SKIP_DONE = True
@@ -89,12 +89,22 @@ CUTPERCENTILE = pf2.sigma2percentile(1.0)*100
 MINPOINTS = 50   # points
 # maximum gap between data points to define a sub region
 MAXGAP = 20  # days
+# -----------------------------------------------------------------------------
+# Data cleaning
+UNCERTAINTY_CLIP = 0.01
 
 
 # =============================================================================
 # Define functions
 # =============================================================================
 def reset(do_reset):
+    if do_reset:
+        uinput = input("Are you sure you wish to delete all current files?"
+                       "[Y]es or [N]o?\t")
+        if "Y" in uinput.upper():
+            do_reset = True
+        else:
+            do_reset = False
     if do_reset and os.path.exists(PERIODPATH):
         print('\n Removing {0}'.format(PERIODPATH))
         os.remove(PERIODPATH)

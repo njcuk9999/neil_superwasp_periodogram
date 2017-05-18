@@ -136,6 +136,9 @@ MAXGAP = 20  # days
 EXT = ''
 # how to normalise all powers
 NORMALISATION = None
+# -----------------------------------------------------------------------------
+# Data cleaning
+UNCERTAINTY_CLIP = 0.005
 
 
 # =============================================================================
@@ -264,7 +267,27 @@ def load_data(params):
             params['NAME'] = 'Test_Data_p={0}'.format(params['TEST_PERIOD'])
         params['DAY0'] = 0
     # -----------------------------------------------------------------------
+    # clean the data
+    time, data, edata = clean_data(time, data, edata, params)
+    # return inputs
     return time, data, edata, params
+
+
+def clean_data(time, data, edata, params):
+
+    # print('Length of data: {0}'.format(len(time)))
+
+    if params['UNCERTAINTY_CLIP'] is not None:
+        mask = (edata/data) <= params['UNCERTAINTY_CLIP']
+        time, data, edata = time[mask], data[mask], edata[mask]
+        if np.sum(mask) == 0:
+            raise ValueError("Error: not points with uncertainty/value"
+                             " < {0}".format(params['UNCERTAINTY_CLIP']))
+
+    # print('Length of data: {0}'.format(len(time)))
+    # input('Ctrl+C to cancel, Enter to continue')
+
+    return time, data, edata
 
 
 def get_sub_regions(time, params):
@@ -483,7 +506,7 @@ def plot_graph(inputs, results, params):
     args = [frames[1][1], phase, data, edata, phasefit, powerfit,
             params['OFFSET']]
     kwargs = dict(title='Phase Curve, period={0:.3f} days'.format(period[0]),
-                  ylabel='Magnitude')
+                  ylabel='Magnitude', plotsigma=5.0)
     frames[1][1] = pf2.plot_phased_curve(*args, **kwargs)
     frames[1][1].set_ylim(*frames[1][1].get_ylim()[::-1])
     # -------------------------------------------------------------------------

@@ -46,9 +46,9 @@ DATACOL = 'TAMMAG2'
 EDATACOL = 'TAMMAG2_ERR'
 
 # record results
-RECORD = False
+RECORD = True
 # do a single object
-SINGLE_OBJECT = True
+SINGLE_OBJECT = False
 SID = 'BPC_46A'
 # -----------------------------------------------------------------------------
 # Phase offset
